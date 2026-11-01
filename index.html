@@ -200,7 +200,7 @@ el('marketGrid').addEventListener('click',event=>{
  equityMode('euro');
  el('equityEuro').value=neededEquity.toFixed(2).replace('.',',');
  el('fixed').value=String(tenure);
- el('interest').value=nominal.toFixed(4).replace('.',',');
+ el('interest').value=nominal.toFixed(2).replace('.',',');
  const notice=el('marketApplied');
  notice.innerHTML='<strong>Marktindikation übernommen:</strong> '+financing+' % Finanzierung · '+tenure+' Jahre Zinsbindung · ca. '+fmt(nominal)+' % Sollzins aus '+fmt(effective)+' % Effektivzins (gebührenfreie Näherung).';
  notice.classList.remove('gone');
