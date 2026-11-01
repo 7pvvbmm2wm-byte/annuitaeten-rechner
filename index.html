@@ -96,7 +96,7 @@ function renderMarket(price,fullCost){
  const rows=[70,80,90,100,110].map(financing=>{
   const loan=price*financing/100,neededEquity=fullCost-loan,excess=Math.max(0,-neededEquity);
   const canApply=neededEquity>=-0.005;
-  const rate=Math.round(effectiveMarketEstimate(financing,b)*20)/20;
+  const rate=Math.round(effectiveMarketEstimate(financing,b)*100)/100;
   const selected=Math.abs(currentRatio-financing)<0.05;
   const equityLabel=canApply?money(Math.max(0,neededEquity)):'nicht erforderlich';
   const warning=financing===110?'<div class="market-flag">110 %: Finanzierung über dem Kaufpreis; nicht jedes Institut bietet das an.</div>':'';
