@@ -61,6 +61,10 @@
 .portfolio-checks{display:grid;gap:9px;margin-top:12px}
 .portfolio-choice{display:flex;align-items:flex-start;gap:11px;padding:11px;border:1px solid #dae5f3;border-radius:11px;background:#f9fbfe;font-size:13px;cursor:pointer}
 .portfolio-choice input{width:19px!important;height:19px;min-height:19px!important;accent-color:#24558e;padding:0;margin:1px 0 0;flex-shrink:0}
+.portfolio-choice-entry{border:1px solid #dae5f3;border-radius:11px;background:#f9fbfe;padding:2px 2px 9px}
+.portfolio-choice-entry .portfolio-choice{border:0;background:transparent;margin:0}
+.portfolio-choice-warning{color:#a65f24!important;font-weight:650}
+.portfolio-edit-button{margin:1px 9px 0 39px;border:1px solid #a8bfdd;background:#fff;border-radius:9px;padding:9px 12px;font-size:12px;font-weight:700;color:#2b568c;min-height:36px}
 .portfolio-choice strong{display:block;font-size:13px}
 .portfolio-choice small{display:block;color:#62758c;line-height:1.5;margin-top:3px}
 .portfolio-year{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap}
@@ -1005,16 +1009,22 @@ function portfolioProperty(item){
  const cash=[price,tax,notary,broker,own,g('interest'),g('repay'),g('fixed'),
   ...investInputs.map(g)];
  const balance=g('investBalance',NaN),market=g('investMarketValue',NaN);
- const valid=purchase&&asOf&&cash.every(x=>Number.isFinite(x)&&x>=0)
+ const financeValid=cash.every(x=>Number.isFinite(x)&&x>=0)
   && price>0&&g('tax')<=100&&g('notary')<=100&&g('broker')<=100
   && g('interest')<=50&&g('repay')<=100&&g('fixed')>=1&&g('fixed')<=50
   && Number.isInteger(g('fixed'))&&g('investBuilding')<=100
   && g('investAfa')<=100&&g('investTaxRate')<=100&&g('investVacancy')<=100
   && g('investDeductible')<=g('investCosts')
   && (!Number.isFinite(balance)||balance>=0)
-  && (!Number.isFinite(market)||market>=0)
-  && (status==='planned'||initialYear<=stamp);
- return {id:item.id,name:item.name,address:s('investAddress'),status,purchase,asOf,
+  && (!Number.isFinite(market)||market>=0);
+ const issues=[];
+ if(!purchase)issues.push('Kaufdatum fehlt oder ist ungültig');
+ if(!asOf)issues.push('Datenstichtag fehlt oder ist ungültig');
+ if(purchase&&asOf&&status==='existing'&&initialYear>stamp)
+  issues.push('Kaufdatum liegt nach dem Datenstichtag');
+ if(!financeValid)issues.push('Finanzierungs-, Miet- oder Kostendaten prüfen');
+ const valid=issues.length===0;
+ return {id:item.id,name:item.name,address:s('investAddress'),status,purchase,asOf,issues,
   price,fullCost,own:Math.max(0,Math.min(fullCost,own)),loan:Math.max(0,fullCost-own),
   rate:g('interest'),repay:g('repay'),fixed:g('fixed'),rent:g('investRent'),
   costs:g('investCosts'),reserve:g('investReserve'),deduct:g('investDeductible'),
@@ -1057,14 +1067,23 @@ function initializePortfolio(){
  el('portfolioYear').min=String(yy);el('portfolioYear').max=String(yy+30);
  if(!portfolioInitialized){
   el('portfolioYear').value=String(yy+10);
-  for(const item of readSavedInvestments()){
-   if(portfolioProperty(item).valid)portfolioSelection.add(item.id);
-  }
+  // Keine automatische Vorauswahl: der Nutzer stellt sein Portfolio bewusst zusammen.
   portfolioInitialized=true;
  }
  renderPortfolioChoices();
  renderPortfolioSaved();
  renderPortfolioRefinancings();
+}
+function editPortfolioProperty(item){
+ const full=readSavedInvestments().find(x=>x.id===item.id);
+ if(!full)return;
+ if(!loadInvestmentRecord(full)){
+  portfolioMessage('Die Immobilie konnte nicht geöffnet werden.',true);
+  return;
+ }
+ renderSavedInvestments(full.id);
+ setInvestmentSaveStatus('Bitte fehlende Stammdaten ergänzen und „Immobilie speichern“ wählen.');
+ el('investPurchaseDate').focus();
 }
 function renderPortfolioChoices(){
  const records=readSavedInvestments(),parent=el('portfolioChoices');
@@ -1073,25 +1092,37 @@ function renderPortfolioChoices(){
  parent.replaceChildren();
  if(!records.length){
   const p=document.createElement('p');p.className='portfolio-note';
-  p.textContent='Noch keine Wohnungen gespeichert. Zuerst im Reiter Kapitalanlage eine Immobilie speichern.';parent.append(p);
+  p.textContent='Hier wurden in diesem Browser noch keine Immobilien gefunden. Öffne die Kapitalanlage in demselben Browser oder importiere deine JSON-Sicherung.';parent.append(p);
  }
+ let incomplete=0;
  for(const item of records){
   const property=portfolioProperty(item);
+  const container=document.createElement('div');container.className='portfolio-choice-entry';
   const label=document.createElement('label');label.className='portfolio-choice';
   const inp=document.createElement('input');inp.type='checkbox';inp.checked=portfolioSelection.has(item.id);
-  inp.disabled=!property.valid;
+  // Auch unvollständige ältere Immobilien bleiben anklickbar.
   const outer=document.createElement('span'),title=document.createElement('strong'),sub=document.createElement('small');
   title.textContent=item.name;
   sub.textContent=property.valid
    ? (property.status==='planned'?'Geplant · ':'Bestand · ')+property.purchase.iso+(property.address?' · '+property.address:'')
-   :'Kaufdatum oder Finanzierungsdaten fehlen: Bitte im Reiter Kapitalanlage ergänzen und neu speichern.';
-  outer.append(title,sub);label.append(inp,outer);parent.append(label);
+   : 'Noch nicht auswertbar: '+property.issues.join('; ');
+  if(!property.valid){sub.className='portfolio-choice-warning';incomplete++}
+  outer.append(title,sub);label.append(inp,outer);container.append(label);
+  if(!property.valid){
+   const edit=document.createElement('button');edit.type='button';
+   edit.className='portfolio-edit-button';
+   edit.textContent='Fehlende Angaben ergänzen';
+   edit.addEventListener('click',()=>editPortfolioProperty(item));
+   container.append(edit);
+  }
+  parent.append(container);
   inp.addEventListener('change',()=>{
    if(inp.checked)portfolioSelection.add(item.id);else portfolioSelection.delete(item.id);
-   renderPortfolioRefinancings();renderPortfolio();
+   renderPortfolioRefinancings();renderPortfolio();renderPortfolioChoices();
   });
  }
- show('portfolioSelectionInfo',portfolioSelection.size+' Immobilien ausgewählt.');
+ show('portfolioSelectionInfo',portfolioSelection.size+' von '+records.length+' Immobilien ausgewählt.'+
+  (incomplete?' Bei '+incomplete+' Immobilie(n) fehlen noch Angaben. Diese können bereits ausgewählt, aber erst nach Ergänzung berechnet werden.':''));
 }
 function renderPortfolioRefinancings(){
  const root=el('portfolioRefinancings');root.replaceChildren();
@@ -1201,7 +1232,10 @@ function computePortfolio(){
  const items=readSavedInvestments().filter(x=>portfolioSelection.has(x.id));
  if(!items.length)return {valid:false,reason:'Wähle zunächst eine oder mehrere gespeicherte Immobilien aus.'};
  const properties=items.map(portfolioProperty);
- if(properties.some(p=>!p.valid))return {valid:false,reason:'Mindestens eine Immobilie hat unvollständige Stammdaten. Bitte Kaufdatum und Datenstichtag im Kapitalanlage-Reiter prüfen.'};
+ if(properties.some(p=>!p.valid)){
+  const details=properties.filter(p=>!p.valid).map(p=>p.name+': '+p.issues.join(', '));
+  return {valid:false,reason:'Auswahl gespeichert, Berechnung noch nicht möglich. '+details.join(' | ')+'. Über „Fehlende Angaben ergänzen“ kannst du die Immobilie direkt bearbeiten.'};
+ }
  const history=properties.map(p=>({p,years:propertyTimeline(p,scenario,portfolioRefis[p.id],yy,endYear)}));
  const years=[];
  for(let year=yy;year<=endYear;year++){
