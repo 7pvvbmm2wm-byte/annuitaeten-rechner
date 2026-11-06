@@ -865,6 +865,12 @@ function investmentPdfBytes(propertyName){
  }
  start();
  section('Objekt und Finanzierung');
+ row('Status',el('investPropertyStatus').value==='planned'?'Geplanter Kauf':'Bestandsimmobilie');
+ row('Kaufdatum / Finanzierungsbeginn',inputOf('investPurchaseDate'));
+ row('Stichtag der aktuellen Daten',inputOf('investDataDate'));
+ if(inputOf('investAddress'))block('Adresse: '+inputOf('investAddress'));
+ if(inputOf('investMarketValue'))row('Heutiger Marktwert',inputOf('investMarketValue')+' EUR');
+ if(inputOf('investBalance'))row('Restschuld laut Stichtag',inputOf('investBalance')+' EUR');
  row('Kaufpreis',textOf('costPrice'));
  row('Erwerbskosten inklusive Kaufnebenkosten',textOf('total'));
  row('Eigenkapital',textOf('equityTop'));
