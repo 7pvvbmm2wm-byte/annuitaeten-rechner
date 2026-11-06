@@ -334,7 +334,7 @@
     <h2>Jahresübersicht</h2>
     <p class="portfolio-note">Die Werte zeigen die Entwicklung des gewählten Bestands und der geplanten Käufe. Bei fehlenden Anschlusskonditionen bleiben betroffene Zahlen bewusst offen.</p>
     <div class="portfolio-table-wrap"><table class="portfolio-table"><thead><tr><th>Jahr</th><th>Immobilien</th><th>Kaltmiete/Jahr</th><th>Cashflow/Jahr</th><th>Restschuld</th><th>Immobilienvermögen</th></tr></thead><tbody id="portfolioYearRows"></tbody></table></div>
-    <p class="portfolio-note">Modellrechnung ohne Sondertilgungen. Für das laufende Jahr wird mit aktuellen Monatswerten ein volles Jahr modelliert, nicht der tatsächliche bisherige Jahresverlauf.</p>
+    <p class="portfolio-note">Modellrechnung ohne Sondertilgungen. Kaufjahr: Mieten und Kosten erst ab Kaufmonat. Für das laufende Jahr wird mit aktuellen Monatswerten ein volles Jahr modelliert, nicht der tatsächliche bisherige Jahresverlauf. Falls kein heutiger Marktwert hinterlegt ist, dient der ursprüngliche Kaufpreis als Wertbasis.</p>
    </section>
   </div>
  </div>
@@ -1062,6 +1062,8 @@ function initializePortfolio(){
 }
 function renderPortfolioChoices(){
  const records=readSavedInvestments(),parent=el('portfolioChoices');
+ const existing=new Set(records.map(item=>item.id));
+ portfolioSelection=new Set([...portfolioSelection].filter(id=>existing.has(id)));
  parent.replaceChildren();
  if(!records.length){
   const p=document.createElement('p');p.className='portfolio-note';
@@ -1141,7 +1143,7 @@ function propertyTimeline(p,s,refi,startYear,endYear){
  const loanFixed=p.fixed*12,refiStop=loanFixed+(Number(ref.fixed)||0)*12;
  const snapshot=p.balance!==null&&p.status==='existing'?monthsApart(p.purchase,p.asOf):-1;
  for(let yr=rawStart.year;yr<=endYear;yr++){
-  const o={year:yr,active:false,rent:0,cost:0,reserve:0,interest:0,payment:0,principal:0,
+  const o={year:yr,active:false,rent:0,nominalRent:0,cost:0,reserve:0,interest:0,payment:0,principal:0,
    cash:0,tax:0,price:0,fullCost:0,debt:0,value:0,invested:0,complete:true};
   for(let month=0;month<12;month++){
    const m={year:yr,month},offset=monthsApart(p.purchase,m);
@@ -1163,6 +1165,7 @@ function propertyTimeline(p,s,refi,startYear,endYear){
    const expense=p.costs*Math.pow(1+s.inflation/100,elapsed);
    const reserve=p.reserve*Math.pow(1+s.inflation/100,elapsed);
    const deductible=p.deduct*Math.pow(1+s.inflation/100,elapsed);
+   o.nominalRent+=p.rent*Math.pow(1+s.rent/100,elapsed);
    o.rent+=rent;o.cost+=expense;o.reserve+=reserve;
    if(!unknown){
     const interest=balance>0.005?balance*rate:0;
@@ -1207,7 +1210,7 @@ function computePortfolio(){
    debt,cash:annualCash,tax:annualTax,principal:complete?total('principal'):null,
    payment:complete?total('payment'):null,interest:complete?total('interest'):null,
    invested:total('invested'),price:total('price'),fullCost:total('fullCost'),
-   gross:total('price')>0?rent/total('price')*100:null,
+   gross:total('price')>0?total('nominalRent')/total('price')*100:null,
    net:total('fullCost')>0?(rent-cost-reserve)/total('fullCost')*100:null,
    equity:complete?value-debt:null});
  }
