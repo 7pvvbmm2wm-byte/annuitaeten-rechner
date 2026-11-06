@@ -13,6 +13,26 @@
 @media(max-width:980px){.layout{grid-template-columns:1fr}.formstack{grid-template-columns:repeat(2,minmax(0,1fr))}.formstack .card:last-child{grid-column:1/-1}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:680px){.shell{padding:19px 12px 30px}.header{margin-bottom:19px}.stamp{display:none}.card{padding:17px}.formstack,.dual{grid-template-columns:1fr}.formstack .card:last-child{grid-column:auto}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.topstats{grid-template-columns:1fr 1fr}.topstat:last-child{grid-column:1/-1}.big{font-size:40px}.fields{gap:10px}.stat{padding:13px}.stat strong{font-size:clamp(14px,4.1vw,19px);white-space:normal;overflow-wrap:anywhere}.market-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.market-card{padding:11px 9px}.market-card .market-rate{font-size:clamp(18px,5.5vw,24px)}.market-card .market-line{display:block}.market-card .market-line strong{display:block;text-align:left;margin-top:1px}h1{font-size:29px}}
 @media print{body{background:white}.shell{max-width:none}.formstack,.secondary,.disclaimer{display:none}.layout{display:block}.card,.stat{box-shadow:none}canvas{max-width:850px}}
+
+/* Ergänzung ausschließlich im Reiter Kapitalanlage */
+.investment-extra{margin-top:17px;padding:15px;border:1px solid #e3eaf4;border-radius:13px;background:#f9fbfe}
+.investment-extra h3,.investment-eval h3{margin:0 0 9px;font-size:16px;color:#24466f}
+.investment-extra .fields{margin-top:13px}
+.investment-eval{margin:20px 0;border-top:1px solid #e3eaf4;padding-top:19px}
+.investment-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin-top:15px}
+.investment-metric{border:1px solid #e2eaf5;background:#f8fbff;border-radius:12px;padding:14px;min-width:0}
+.investment-metric span,.investment-metric small{display:block;color:#667991;font-size:12px;line-height:1.35}
+.investment-metric strong{display:block;font-size:clamp(21px,2.6vw,28px);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;margin:5px 0}
+.investment-verdict{padding:15px 17px;border:1px solid #b8c9df;border-left:5px solid #5f7290;border-radius:11px;margin-top:17px}
+.investment-verdict.good{border-left-color:#21805b}.investment-verdict.caution{border-left-color:#b67b27}.investment-verdict.bad{border-left-color:#b65a50}
+.investment-verdict strong{display:block;font-size:17px}.investment-verdict p{font-size:13px;line-height:1.55;margin:8px 0 0;color:#556d86}
+.investment-flow{border:1px solid #e3eaf4;border-radius:13px;padding:15px;margin-top:15px}
+.investment-flow h4{margin:0 0 11px;font-size:14px;color:#24466f}
+.investment-flow .cost{padding:8px 0}
+.investment-flow .cost strong{font-variant-numeric:tabular-nums}
+.investment-flow .cost.emphasis{border-top:2px solid #cad9ed;padding-top:12px;margin-top:5px;font-weight:800}
+.investment-flow .cost.muted{font-size:12px;color:#667991}
+@media(max-width:420px){.investment-metrics{grid-template-columns:1fr}.investment-extra{padding:11px}.investment-flow{padding:11px}}
 </style>
 </head>
 <body><div class="shell">
@@ -44,7 +64,7 @@
 </section>
 <section class="card gone" id="investPanel" aria-labelledby="investTitle">
 <div class="section"><span class="dot">4</span><span id="investTitle">Kapitalanlage · Monatsüberschlag</span></div>
-<p class="sub">Darlehensrate und Zinsen werden aus dem bestehenden Rechner übernommen. Für einen schnellen Immobilienvergleich reicht hier zunächst der erste Kreditmonat.</p>
+<p class="sub">Darlehensrate und Zinsen werden aus dem bestehenden Rechner übernommen. Die Monatsübersicht zeigt Monat 1; das zusätzliche Dashboard bewertet das erste volle Vermietungsjahr.</p>
 <div class="fields" style="margin-top:17px">
 <div class="field"><label for="investRent">Kaltmiete monatlich</label><div class="withunit"><input id="investRent" inputmode="decimal" value="1.000"><span class="unit">€</span></div></div>
 <div class="field"><label for="investCosts">Nicht umlagefähige Kosten monatlich</label><div class="withunit"><input id="investCosts" inputmode="decimal" value="150"><span class="unit">€</span></div></div>
@@ -52,27 +72,69 @@
 <div class="field"><label for="investAfa">AfA jährlich</label><div class="withunit"><input id="investAfa" inputmode="decimal" value="2,00"><span class="unit">%</span></div></div>
 <div class="field wide"><label for="investTaxRate">Persönlicher Grenzsteuersatz (Schätzung)</label><div class="withunit"><input id="investTaxRate" inputmode="decimal" value="35"><span class="unit">%</span></div></div>
 </div>
+
+<div class="investment-extra">
+  <h3>Weitere Annahmen für die Renditeberechnung</h3>
+  <p class="investment-note">Die folgenden Werte gelten nur für die Kapitalanlage. Die reguläre Finanzierung wird nicht verändert.</p>
+  <div class="fields">
+    <div class="field"><label for="investVacancy">Mietausfall / Leerstand p. a.</label><div class="withunit"><input id="investVacancy" inputmode="decimal" value="0"><span class="unit">%</span></div></div>
+    <div class="field"><label for="investReserve">Zusätzliches Instandhaltungsbudget / Monat</label><div class="withunit"><input id="investReserve" inputmode="decimal" value="0"><span class="unit">€</span></div></div>
+    <div class="field wide"><label for="investDeductible">Davon steuerlich abziehbare laufende Kosten / Monat</label><div class="withunit"><input id="investDeductible" inputmode="decimal" value="0"><span class="unit">€</span></div></div>
+  </div>
+  <p class="investment-note">Das Instandhaltungsbudget nur ergänzen, soweit es noch nicht in den nicht umlagefähigen Kosten enthalten ist. „Davon abziehbar“ bezieht sich ausschließlich auf diese nicht umlagefähigen Kosten (maximal deren Betrag). Einzahlungen in eine WEG-Erhaltungsrücklage sind regelmäßig nicht bereits bei Einzahlung steuerlich abzugsfähig.</p>
+</div>
 <p class="investment-error gone" id="investError" role="alert"></p>
 <div class="investment-summary" aria-live="polite">
 <div class="stat"><span>Cashflow vor Steuern / Monat</span><strong id="investBefore">–</strong></div>
 <div class="stat"><span>Steuereffekt / Monat</span><strong id="investEffect">–</strong><em>+ Entlastung · − Belastung</em></div>
 <div class="stat"><span>Cashflow nach Steuern / Monat</span><strong id="investAfter">–</strong></div>
 </div>
+
+<section class="investment-eval" aria-labelledby="investEvalTitle">
+ <h3 id="investEvalTitle">Wirtschaftlichkeits-Dashboard</h3>
+ <p class="investment-note">Renditen auf Basis des Kaufpreises bzw. der gesamten Erwerbskosten; Cashflow und Eigenkapitalrendite auf Basis von Jahr 1.</p>
+ <div class="investment-metrics" aria-live="polite">
+  <div class="investment-metric"><span>Bruttomietrendite</span><strong id="investGrossYield">–</strong><small>Jahreskaltmiete ÷ Kaufpreis</small></div>
+  <div class="investment-metric"><span>Nettomietrendite vor Finanzierung</span><strong id="investNetYield">–</strong><small>Nach Mietausfall, laufenden Kosten und Instandhaltungsbudget ÷ Erwerbskosten</small></div>
+  <div class="investment-metric"><span>Kaufpreisfaktor</span><strong id="investPriceFactor">–</strong><small>Kaufpreis ÷ jährliche Soll-Kaltmiete</small></div>
+  <div class="investment-metric"><span>Eigenkapitalrendite im 1. Jahr</span><strong id="investEquityYield">–</strong><small>Cashflow nach Steuern inkl. Sondertilgung + Tilgung ÷ Eigenkapital; ohne Wertänderung</small></div>
+  <div class="investment-metric"><span>Erforderliche Kaltmiete / Monat</span><strong id="investBreakEven">–</strong><small>Für Cashflow ≥ 0 nach geschätzter Steuer; ohne freiwillige Sondertilgung</small></div>
+  <div class="investment-metric"><span>Deckungsgrad vor Steuern</span><strong id="investDebtCoverage">–</strong><small>Netto-Mieteinnahmen nach laufenden Ausgaben ÷ reguläre Kreditraten</small></div>
+ </div>
+ <div class="investment-verdict" id="investVerdict" aria-live="polite">
+  <strong id="investAssessment">–</strong><p id="investAssessmentDetail">Die Wirtschaftlichkeit wird aus deinen Eingaben berechnet.</p>
+ </div>
+ <div class="investment-flow">
+  <h4>Liquiditäts- und Vermögensrechnung · Jahr 1</h4>
+  <div class="cost"><span>Jahreskaltmiete nach erwartetem Mietausfall</span><strong id="investNetRentYear">–</strong></div>
+  <div class="cost"><span>− Nicht umlagefähige laufende Kosten</span><strong id="investTotalCostsYear">–</strong></div>
+  <div class="cost"><span>− Zusätzliches Instandhaltungsbudget</span><strong id="investReserveYear">–</strong></div>
+  <div class="cost"><span>− Reguläre Darlehensraten</span><strong id="investDebtYear">–</strong></div>
+  <div class="cost emphasis"><span>= Cashflow vor Steuern, ohne Sondertilgung</span><strong id="investCashYearPre">–</strong></div>
+  <div class="cost"><span>± Geschätzte Steuerwirkung</span><strong id="investTaxYear">–</strong></div>
+  <div class="cost"><span>− Freiwillige Sondertilgung</span><strong id="investSpecialYear">–</strong></div>
+  <div class="cost emphasis"><span>= Liquiditätsüberschuss nach Steuern und Sondertilgung</span><strong id="investCashYear">–</strong></div>
+  <div class="cost"><span>+ Getilgte Darlehensschuld (inkl. Sondertilgung)</span><strong id="investPrincipalYear">–</strong></div>
+  <div class="cost emphasis"><span>= Cashflow + Schuldenabbau (ohne Wertänderung)</span><strong id="investWealthYear">–</strong></div>
+  <p class="investment-note">Die letzte Position ist eine vereinfachte Vermögensbetrachtung, kein sofort verfügbares Geld. Auch eine Immobilie mit Vermögenszuwachs kann monatliche Zuschüsse erfordern. Leerstand ist als gleichmäßig verteilter Erwartungswert modelliert; unerwartete Reparaturen, Wertänderungen, Anschlusszinsen und Verkaufskosten sind nicht enthalten.</p>
+ </div>
+</section>
 <section class="tax-detail" aria-label="Steuerliche Aufschlüsselung">
 <h3>Steuerliche Aufschlüsselung</h3>
 <p class="investment-note" style="margin:0 0 12px">Überschlag für Monat 1 und das erste volle Vermietungsjahr. Bei den Jahreszinsen ist der tatsächliche Tilgungsverlauf berücksichtigt.</p>
 <div class="tax-grid" aria-live="polite">
 <div class="tax-head">Position</div><div class="tax-head">Monat 1</div><div class="tax-head">Jahr 1</div>
-<div>Kaltmiete</div><div id="taxRentMonth">–</div><div id="taxRentYear">–</div>
+<div>Kaltmiete nach Mietausfall</div><div id="taxRentMonth">–</div><div id="taxRentYear">–</div>
 <div>− Schuldzinsen</div><div id="taxInterestMonth">–</div><div id="taxInterestYear">–</div>
 <div>− Gebäude-AfA</div><div id="taxAfaMonth">–</div><div id="taxAfaYear">–</div>
-<div class="tax-separator">= Steuerliches Ergebnis</div><div class="tax-separator" id="taxResultMonth">–</div><div class="tax-separator" id="taxResultYear">–</div>
+<div>− Sofort abziehbare laufende Kosten</div><div id="taxDeductMonth">–</div><div id="taxDeductYear">–</div>
+  <div class="tax-separator">= Steuerliches Ergebnis</div><div class="tax-separator" id="taxResultMonth">–</div><div class="tax-separator" id="taxResultYear">–</div>
 <div class="tax-total">Geschätzter Steuereffekt</div><div class="tax-total" id="taxEffectMonth">–</div><div class="tax-total" id="taxEffectYear">–</div>
 </div>
 <p class="tax-basis">AfA-Bemessungsgrundlage (vereinfachter Gebäudeanteil): <strong id="taxAfaBasis">–</strong>. Positive Steuerwirkung bedeutet Entlastung, negative bedeutet zusätzliche Steuer.</p>
 </section>
 <p id="investDetail" class="investment-note">Basierend auf dem ersten Kreditmonat.</p>
-<p class="investment-note">Vereinfachte Modellrechnung: AfA = Gebäudeanteil × Kaufpreis × AfA-Satz; Kredit-Zinsen sind steuerlich berücksichtigt, Tilgung nicht. Nicht umlagefähige Kosten mindern den Cashflow, werden konservativ steuerlich nicht zusätzlich abgezogen. Erhaltungsrücklagen sind bei Einzahlung regelmäßig nicht sofort abzugsfähig. Steuerliche Verluste führen nur bei Verrechenbarkeit zu einer Entlastung. Tatsächliche Gebäudeaufteilung, Abschreibung und Steuerwirkung können abweichen.</p>
+<p class="investment-note">Vereinfachte Modellrechnung: AfA = Gebäudeanteil × Kaufpreis × AfA-Satz; Kredit-Zinsen sind steuerlich berücksichtigt, Tilgung nicht. Nur der separat angegebene sofort abziehbare Teil der laufenden Kosten wird steuerlich berücksichtigt; das zusätzliche Instandhaltungsbudget ist lediglich eine Liquiditätsvorsorge. Erhaltungsrücklagen sind bei Einzahlung regelmäßig nicht sofort abzugsfähig. Steuerliche Verluste führen nur bei Verrechenbarkeit zu einer Entlastung. Tatsächliche Gebäudeaufteilung, Abschreibung und Steuerwirkung können abweichen.</p>
 </section>
 <section class="card" id="monthBreakdown"><div class="tabletop"><h2 style="margin:0">Zins und Tilgung je Monat</h2><span class="stamp" style="display:inline-block" id="monthBadge">Monat 1</span></div><div class="picker-caption"><label for="monthPicker">Monat auswählen</label><strong id="monthLabel">Monat 1 · Jahr 1</strong></div><input id="monthPicker" type="range" class="range" min="1" max="120" value="1" step="1"><div class="breakdown"><div class="breakdown-item interest-item"><span>Zinsen in diesem Monat</span><strong id="monthInterest">–</strong><small id="monthInterestPct">– % der Rate</small></div><div class="breakdown-item"><span>Reguläre Tilgung</span><strong id="monthPrincipal">–</strong><small id="monthPrincipalPct">– % der Rate</small></div></div><div class="split-bar" role="img" aria-label="Anteil Zinsen und Tilgung an der monatlichen Rate"><div class="split-interest" id="splitInterest" style="width:50%"></div><div class="split-principal" id="splitPrincipal"></div></div><div class="legend" style="margin-top:9px"><span><i style="background:#e6a45d"></i>Zinsanteil</span><span><i style="background:#457de0"></i>Tilgungsanteil</span></div><div class="month-meta"><span>Reguläre Rate: <strong id="monthRegular">–</strong></span><span>Sondertilgung: <strong id="monthExtra">–</strong></span><span>Restschuld danach: <strong id="monthBalance">–</strong></span></div></section>
 <div class="stats">
@@ -97,7 +159,7 @@
 'use strict';
 const el = id => document.getElementById(id);
 const inputs=['price','tax','notary','broker','equityEuro','equityPct','interest','repay','fixed'];
-const investInputs=['investRent','investCosts','investBuilding','investAfa','investTaxRate'];
+const investInputs=['investRent','investCosts','investBuilding','investAfa','investTaxRate','investVacancy','investReserve','investDeductible'];
 const money=n=>new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n);
 const cents=n=>new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
 const percent=n=>new Intl.NumberFormat('de-DE',{maximumFractionDigits:1}).format(n)+' %';
@@ -187,45 +249,98 @@ data={years,months,points,loan,fix:p.fixed};monthSelected=Math.min(monthSelected
 }
 function renderInvestment(){
  if(!data)return;
- const [rent,costs,buildingPct,afaPct,taxPct]=investInputs.map(v);
- const valid=[rent,costs,buildingPct,afaPct,taxPct].every(x=>Number.isFinite(x)&&x>=0) && buildingPct<=100 && afaPct<=100 && taxPct<=100;
- const err=el('investError');
+ const [rent,costs,buildingPct,afaPct,taxPct,vacancyPct,reserve,deductible]=investInputs.map(v);
+ const valid=[rent,costs,buildingPct,afaPct,taxPct,vacancyPct,reserve,deductible].every(x=>Number.isFinite(x)&&x>=0)
+   && buildingPct<=100 && afaPct<=100 && taxPct<=100 && vacancyPct<=100 && deductible<=costs;
+ const ids=['investBefore','investEffect','investAfter','taxRentMonth','taxRentYear','taxInterestMonth',
+  'taxInterestYear','taxAfaMonth','taxAfaYear','taxResultMonth','taxResultYear',
+  'taxEffectMonth','taxEffectYear','taxAfaBasis','taxDeductMonth','taxDeductYear','investGrossYield','investNetYield',
+  'investPriceFactor','investEquityYield','investBreakEven','investDebtCoverage',
+  'investNetRentYear','investTotalCostsYear','investReserveYear','investDebtYear',
+  'investCashYearPre','investTaxYear','investSpecialYear','investCashYear',
+  'investPrincipalYear','investWealthYear'];
+ const err=el('investError'), verdict=el('investVerdict');
  if(!valid){
-   err.textContent='Bitte gültige Beträge und Prozentsätze zwischen 0 und 100 eingeben.';
-   err.classList.remove('gone');
-   ['investBefore','investEffect','investAfter'].forEach(id=>show(id,'–'));
-   ['taxRentMonth','taxRentYear','taxInterestMonth','taxInterestYear','taxAfaMonth','taxAfaYear','taxResultMonth','taxResultYear','taxEffectMonth','taxEffectYear','taxAfaBasis'].forEach(id=>show(id,'–'));
+   err.textContent='Bitte nichtnegative Werte und Prozentsätze zwischen 0 und 100 eingeben. Steuerlich abziehbare laufende Kosten dürfen nicht höher sein als die nicht umlagefähigen Kosten.';
+   err.classList.remove('gone');ids.forEach(id=>show(id,'–'));
+   show('investAssessment','Bewertung derzeit nicht möglich');
+   show('investAssessmentDetail','Bitte die Angaben im Kapitalanlage-Reiter korrigieren.');
+   verdict.className='investment-verdict';
    show('investDetail','Bitte Eingaben korrigieren.');return;
  }
  err.classList.add('gone');err.textContent='';
+ const price=v('price');
+ const fullCost=price*(1+(v('tax')+v('notary')+v('broker'))/100);
+ const ownRaw=mode==='euro'?v('equityEuro'):fullCost*v('equityPct')/100;
+ const own=Math.min(fullCost,ownRaw);
+ const annualRentNominal=rent*12, effectiveRentMonth=rent*(1-vacancyPct/100);
+ const annualRent=annualRentNominal*(1-vacancyPct/100);
+ const afaMonth=price*buildingPct/100*afaPct/100/12;
+ const afaYear=afaMonth*12;
  const first=data.months[0];
- const payment=first ? first.p-first.e : 0;
- const interest=first ? first.i : 0;
- const afa=v('price')*buildingPct/100*afaPct/100/12;
- const taxable=rent-interest-afa;
- const taxEffect=-taxable*taxPct/100;
- const cashBefore=rent-payment-costs;
- const cashAfter=cashBefore+taxEffect;
- show('investBefore',cents(cashBefore));
- show('investEffect',(taxEffect>0?'+':'')+cents(taxEffect));
- show('investAfter',cents(cashAfter));
- show('investDetail','Rate: '+cents(payment)+'/Monat · Zinsen im Monat 1: '+cents(interest)+' · geschätzte AfA: '+cents(afa)+'/Monat · steuerliches Ergebnis (vereinfacht): '+cents(taxable)+'/Monat.');
-
- // Im Monat 1 entspricht die Steuerwirkung dem Cashflow-Modell oben.
- // Für Jahr 1 werden die zwölf tatsächlich berechneten Monatszinsen addiert.
- const firstYear=data.months.slice(0,12);
- const interestYear=firstYear.reduce((sum,m)=>sum+m.i,0);
- const afaYear=afa*12;
- const rentYear=rent*12;
- const taxableYear=rentYear-interestYear-afaYear;
- const taxEffectYear=-taxableYear*taxPct/100;
+ const firstInterest=first?first.i:0;
+ const firstRegular=first?first.p-first.e:0;
+ const firstTaxable=effectiveRentMonth-firstInterest-afaMonth-deductible;
+ const firstTaxEffect=-firstTaxable*taxPct/100;
+ const firstCashBefore=effectiveRentMonth-firstRegular-costs-reserve;
+ const firstCashAfter=firstCashBefore+firstTaxEffect;
  const signed=n=>(n>0?'+':'')+cents(n);
- [['taxRentMonth',rent],['taxRentYear',rentYear],['taxInterestMonth',interest],
-  ['taxInterestYear',interestYear],['taxAfaMonth',afa],['taxAfaYear',afaYear],
-  ['taxResultMonth',taxable],['taxResultYear',taxableYear]].forEach(([id,value])=>show(id,cents(value)));
- show('taxEffectMonth',signed(taxEffect));
- show('taxEffectYear',signed(taxEffectYear));
- show('taxAfaBasis',money(v('price')*buildingPct/100));
+ show('investBefore',cents(firstCashBefore));
+ show('investEffect',signed(firstTaxEffect));
+ show('investAfter',cents(firstCashAfter));
+ show('investDetail','Monat 1 · Reguläre Rate: '+cents(firstRegular)+' · Schuldzinsen: '+cents(firstInterest)+' · AfA: '+cents(afaMonth)+' · erwarteter Mietausfall: '+fmt(vacancyPct)+' %.');
+ const firstYear=data.months.slice(0,12);
+ const interestYear=firstYear.reduce((s,m)=>s+m.i,0);
+ const regularYear=firstYear.reduce((s,m)=>s+m.p-m.e,0);
+ const specialYear=firstYear.reduce((s,m)=>s+m.e,0);
+ const principalYear=firstYear.reduce((s,m)=>s+m.t,0);
+ const costsYear=costs*12, reserveYear=reserve*12, deductibleYear=deductible*12;
+ const taxableYear=annualRent-interestYear-afaYear-deductibleYear;
+ const taxEffectYear=-taxableYear*taxPct/100;
+ const cashYearPre=annualRent-regularYear-costsYear-reserveYear;
+ const cashYearAfterRegular=cashYearPre+taxEffectYear;
+ const cashYearAfterSpecial=cashYearAfterRegular-specialYear;
+ const wealthYear=cashYearAfterSpecial+principalYear;
+ [['taxRentMonth',effectiveRentMonth],['taxRentYear',annualRent],
+  ['taxInterestMonth',firstInterest],['taxInterestYear',interestYear],
+  ['taxAfaMonth',afaMonth],['taxAfaYear',afaYear],
+  ['taxResultMonth',firstTaxable],['taxResultYear',taxableYear]].forEach(([id,val])=>show(id,cents(val)));
+ show('taxDeductMonth',cents(deductible));show('taxDeductYear',cents(deductibleYear));
+ show('taxEffectMonth',signed(firstTaxEffect));show('taxEffectYear',signed(taxEffectYear));
+ show('taxAfaBasis',money(price*buildingPct/100));
+ const grossYield=price>0?annualRentNominal/price*100:NaN;
+ const netYield=fullCost>0?(annualRent-costsYear-reserveYear)/fullCost*100:NaN;
+ const factor=annualRentNominal>0?price/annualRentNominal:NaN;
+ const equityYield=own>0?wealthYear/own*100:NaN;
+ const coverage=regularYear>0?(annualRent-costsYear-reserveYear)/regularYear:NaN;
+ const rentDenominator=12*(1-vacancyPct/100)*(1-taxPct/100);
+ const breakEven=rentDenominator>0?Math.max(0,(regularYear+costsYear+reserveYear-taxPct/100*(interestYear+afaYear+deductibleYear))/rentDenominator):NaN;
+ show('investGrossYield',percent(grossYield));
+ show('investNetYield',percent(netYield));
+ show('investPriceFactor',Number.isFinite(factor)?fmt(factor)+'-fach':'–');
+ show('investEquityYield',Number.isFinite(equityYield)?percent(equityYield):'– (kein EK)');
+ show('investBreakEven',Number.isFinite(breakEven)?cents(breakEven):'–');
+ show('investDebtCoverage',Number.isFinite(coverage)?fmt(coverage)+'×':'– (kein Kredit)');
+ [['investNetRentYear',annualRent],['investTotalCostsYear',-costsYear],
+  ['investReserveYear',-reserveYear],['investDebtYear',-regularYear],
+  ['investCashYearPre',cashYearPre],['investTaxYear',taxEffectYear],
+  ['investSpecialYear',-specialYear],['investCashYear',cashYearAfterSpecial],
+  ['investPrincipalYear',principalYear],['investWealthYear',wealthYear]]
+  .forEach(([id,val])=>show(id,signed(val)));
+ const avgBefore=cashYearPre/12, avgAfter=cashYearAfterRegular/12;
+ if(avgBefore>=-0.005){
+  verdict.className='investment-verdict good';
+  show('investAssessment','Ja – die Wohnung trägt sich vor Steuern');
+  show('investAssessmentDetail','Im ersten Jahr bleiben im Mittel '+signed(avgBefore)+'/Monat vor Steuern und '+signed(avgAfter)+'/Monat nach geschätzter Steuerwirkung übrig. Freiwillige Sondertilgungen sind separat ausgewiesen.');
+ }else if(avgAfter>=-0.005){
+  verdict.className='investment-verdict caution';
+  show('investAssessment','Nur rechnerisch nach Steuern selbsttragend');
+  show('investAssessmentDetail','Vor Steuern fehlen im ersten Jahr durchschnittlich '+cents(-avgBefore)+'/Monat. Erst unter Annahme der geschätzten Steuerwirkung ergibt sich '+signed(avgAfter)+'/Monat. Steuererstattungen sind nicht zwingend monatlich verfügbar oder in voller Höhe realisierbar.');
+ }else{
+  verdict.className='investment-verdict bad';
+  show('investAssessment','Nein – die Wohnung benötigt einen Zuschuss');
+  show('investAssessmentDetail','Im ersten Jahr fehlen im Durchschnitt '+cents(-avgBefore)+'/Monat vor Steuern und '+cents(-avgAfter)+'/Monat nach geschätzter Steuerwirkung. Diese Beträge berücksichtigen laufende Kosten und das zusätzliche Instandhaltungsbudget, aber keine freiwilligen Sondertilgungen.');
+ }
 }
 function setInvestmentTab(on){
  el('useOwner').classList.toggle('active',!on);
