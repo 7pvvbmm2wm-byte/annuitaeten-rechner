@@ -95,7 +95,7 @@
 <body><div class="shell">
 <header class="header"><div><div class="eyebrow">Immobilienfinanzierung · Baden-Württemberg</div><h1>Annuitätendarlehen-Rechner</h1><p class="sub">Kaufpreis, Eigenkapital und Konditionen verändern – die Ergebnisse werden sofort berechnet.</p></div><span class="stamp">● Interaktiv</span></header>
 <nav class="tabs investment-tabs" aria-label="Berechnungsbereich"><button id="useOwner" type="button" class="active" aria-pressed="true">Eigennutzung</button><button id="useInvestor" type="button" aria-pressed="false">Kapitalanlage</button><button id="usePortfolio" type="button" aria-pressed="false">Portfolio</button></nav>
-<div class="layout"><aside class="formstack">
+<div class="layout" id="mainLayout"><aside class="formstack">
 <section class="card"><div class="section"><span class="dot">1</span>Kauf und Nebenkosten</div><div class="fields">
 <div class="field wide"><label for="price">Kaufpreis</label><div class="withunit"><input id="price" value="700.000" inputmode="decimal"><span class="unit">€</span></div></div>
 <div class="field"><label for="tax">Grunderwerbsteuer</label><div class="withunit"><input id="tax" value="5,00" inputmode="decimal"><span class="unit">%</span></div></div>
@@ -309,6 +309,9 @@
       <div class="portfolio-metric"><span>Bruttomietrendite</span><strong id="pGross">–</strong></div>
       <div class="portfolio-metric"><span>Nettomietrendite</span><strong id="pNet">–</strong></div>
       <div class="portfolio-metric"><span>Tilgung pro Jahr</span><strong id="pPrincipal">–</strong></div>
+      <div class="portfolio-metric"><span>Eigenkapital für geplante Käufe</span><strong id="pNewEquity">–</strong><small>im Bewertungsjahr</small></div>
+      <div class="portfolio-metric"><span>Cashflow vor Steuern</span><strong id="pCashBefore">–</strong><small>Ø pro Monat</small></div>
+      <div class="portfolio-metric"><span>Ab welchem Jahr dauerhaft positiv?</span><strong id="pBreakYear">–</strong><small>nach geschätzten Steuern</small></div>
     </div>
     <div id="portfolioVerdict" class="portfolio-warning">Wähle mindestens eine gespeicherte Immobilie aus.</div>
    </section>
@@ -528,14 +531,19 @@ function renderInvestment(){
   show('investAssessmentDetail','Im ersten Jahr fehlen im Durchschnitt '+cents(-avgBefore)+'/Monat vor Steuern und '+cents(-avgAfter)+'/Monat nach geschätzter Steuerwirkung. Diese Beträge berücksichtigen laufende Kosten und das zusätzliche Instandhaltungsbudget, aber keine freiwilligen Sondertilgungen.');
  }
 }
-function setInvestmentTab(on){
- el('useOwner').classList.toggle('active',!on);
- el('useInvestor').classList.toggle('active',on);
- el('useOwner').setAttribute('aria-pressed',String(!on));
- el('useInvestor').setAttribute('aria-pressed',String(on));
- el('investPanel').classList.toggle('gone',!on);
- renderInvestment();
+function setAppTab(tab){
+ const tabs={owner:'useOwner',invest:'useInvestor',portfolio:'usePortfolio'};
+ for(const [key,id] of Object.entries(tabs)){
+  el(id).classList.toggle('active',key===tab);
+  el(id).setAttribute('aria-pressed',String(key===tab));
+ }
+ el('investPanel').classList.toggle('gone',tab!=='invest');
+ el('mainLayout').classList.toggle('gone',tab==='portfolio');
+ el('portfolioPanel').classList.toggle('gone',tab!=='portfolio');
+ if(tab==='portfolio'){initializePortfolio();renderPortfolio();}
+ else {renderInvestment();draw();}
 }
+function setInvestmentTab(on){setAppTab(on?'invest':'owner')}
 function renderMonth(){
 if(!data)return;
 const months=data.months,slider=el('monthPicker');slider.disabled=!months.length;slider.max=Math.max(1,months.length);slider.value=monthSelected;
@@ -925,8 +933,396 @@ el('investPropertyStatus').addEventListener('change',()=>{
 });
 renderSavedInvestments();
 investInputs.forEach(id=>el(id).addEventListener('input',renderInvestment));
+
+/* Portfolio: Datenstruktur & Zeitmodell. Lokale Speicherung, keine Netzwerkübermittlung. */
+const PORTFOLIO_STORAGE_KEY='annuitaeten-rechner.portfolios.v1';
+let portfolioSelection=new Set(),portfolioRefis={},portfolioInitialized=false,portfolioProjection=[],portfolioCurrent=null;
+function getPortfolios(){
+ try{
+  const data=JSON.parse(window.localStorage.getItem(PORTFOLIO_STORAGE_KEY)||'[]');
+  return Array.isArray(data)?data.filter(p=>p&&typeof p.id==='string'&&typeof p.name==='string'&&Array.isArray(p.ids)):[];
+ }catch(e){portfolioMessage('Gespeicherte Portfolios konnten nicht gelesen werden.',true);return []}
+}
+function storePortfolios(items){
+ try{window.localStorage.setItem(PORTFOLIO_STORAGE_KEY,JSON.stringify(items));return true}
+ catch(e){portfolioMessage('Portfolios können in diesem Browser nicht gespeichert werden.',true);return false}
+}
+function portfolioMessage(msg,error=false){
+ const x=el('portfolioSaveStatus');x.textContent=msg;x.classList.toggle('error',error);
+}
+function portfolioNumeric(obj,id,fallback=NaN){
+ const raw=obj.values&&obj.values[id];
+ return raw==null||raw===''?fallback:number(raw);
+}
+function portfolioProperty(item){
+ const g=id=>portfolioNumeric(item,id);
+ const s=id=>String((item.values||{})[id]||'');
+ const price=g('price'),tax=g('tax'),notary=g('notary'),broker=g('broker');
+ const initialYear=s('investPurchaseDate'),stamp=s('investDataDate')||(item.date||'').slice(0,10);
+ const purchase=validPortfolioDate(initialYear),asOf=validPortfolioDate(stamp);
+ const status=s('investPropertyStatus')==='planned'?'planned':'existing';
+ const fullCost=price*(1+(tax+notary+broker)/100);
+ const own=item.equityMode==='pct'?fullCost*g('equityPct')/100:g('equityEuro');
+ const cash=[price,tax,notary,broker,own,g('interest'),g('repay'),g('fixed'),
+  ...investInputs.map(g)];
+ const balance=g('investBalance',NaN),market=g('investMarketValue',NaN);
+ const valid=purchase&&asOf&&cash.every(x=>Number.isFinite(x)&&x>=0)
+  && price>0&&g('tax')<=100&&g('notary')<=100&&g('broker')<=100
+  && g('interest')<=50&&g('repay')<=100&&g('fixed')>=1&&g('fixed')<=50
+  && Number.isInteger(g('fixed'))&&g('investBuilding')<=100
+  && g('investAfa')<=100&&g('investTaxRate')<=100&&g('investVacancy')<=100
+  && g('investDeductible')<=g('investCosts')
+  && (!Number.isFinite(balance)||balance>=0)
+  && (!Number.isFinite(market)||market>=0)
+  && (status==='planned'||initialYear<=stamp);
+ return {id:item.id,name:item.name,address:s('investAddress'),status,purchase,asOf,
+  price,fullCost,own:Math.max(0,Math.min(fullCost,own)),loan:Math.max(0,fullCost-own),
+  rate:g('interest'),repay:g('repay'),fixed:g('fixed'),rent:g('investRent'),
+  costs:g('investCosts'),reserve:g('investReserve'),deduct:g('investDeductible'),
+  vacancy:g('investVacancy'),taxRate:g('investTaxRate'),building:g('investBuilding'),afa:g('investAfa'),
+  market:Number.isFinite(market)?market:price,balance:Number.isFinite(balance)?balance:null,
+  valid:Boolean(valid)};
+}
+function validPortfolioDate(date){
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return null;
+ const d=new Date(date+'T12:00:00');
+ return Number.isNaN(d.getTime())||d.getFullYear()!==Number(date.slice(0,4))
+  ||d.getMonth()+1!==Number(date.slice(5,7))||d.getDate()!==Number(date.slice(8,10))
+  ?null:{year:d.getFullYear(),month:d.getMonth(),iso:date};
+}
+function portfolioScenario(){
+ return {inflation:v('portfolioInflation'),rent:v('portfolioRentGrowth'),value:v('portfolioValueGrowth')};
+}
+function portfolioScenarioValid(s){
+ return Number.isFinite(s.inflation)&&s.inflation>=-10&&s.inflation<=30
+  &&Number.isFinite(s.rent)&&s.rent>=-10&&s.rent<=30
+  &&Number.isFinite(s.value)&&s.value>=-20&&s.value<=30;
+}
+function monthsApart(first,second){
+ return (second.year-first.year)*12+(second.month-first.month);
+}
+function portfolioResidual(p){
+ if(!p.valid)return NaN;
+ let debt=p.loan,rate=p.rate/1200,payment=p.loan*(p.rate+p.repay)/1200;
+ const snapshot=p.balance!==null&&p.status==='existing'?monthsApart(p.purchase,p.asOf):-1;
+ for(let i=0;i<p.fixed*12;i++){
+  if(snapshot===i)debt=p.balance;
+  if(debt<=0.005)return 0;
+  const interest=debt*rate;
+  debt=Math.max(0,debt-Math.max(0,Math.min(payment,debt+interest)-interest));
+ }
+ return debt;
+}
+function initializePortfolio(){
+ const yy=new Date().getFullYear();
+ el('portfolioYear').min=String(yy);el('portfolioYear').max=String(yy+30);
+ if(!portfolioInitialized){
+  el('portfolioYear').value=String(yy+10);
+  for(const item of readSavedInvestments()){
+   if(portfolioProperty(item).valid)portfolioSelection.add(item.id);
+  }
+  portfolioInitialized=true;
+ }
+ renderPortfolioChoices();
+ renderPortfolioSaved();
+ renderPortfolioRefinancings();
+}
+function renderPortfolioChoices(){
+ const records=readSavedInvestments(),parent=el('portfolioChoices');
+ parent.replaceChildren();
+ if(!records.length){
+  const p=document.createElement('p');p.className='portfolio-note';
+  p.textContent='Noch keine Wohnungen gespeichert. Zuerst im Reiter Kapitalanlage eine Immobilie speichern.';parent.append(p);
+ }
+ for(const item of records){
+  const property=portfolioProperty(item);
+  const label=document.createElement('label');label.className='portfolio-choice';
+  const inp=document.createElement('input');inp.type='checkbox';inp.checked=portfolioSelection.has(item.id);
+  inp.disabled=!property.valid;
+  const outer=document.createElement('span'),title=document.createElement('strong'),sub=document.createElement('small');
+  title.textContent=item.name;
+  sub.textContent=property.valid
+   ? (property.status==='planned'?'Geplant · ':'Bestand · ')+property.purchase.iso+(property.address?' · '+property.address:'')
+   :'Kaufdatum oder Finanzierungsdaten fehlen: Bitte im Reiter Kapitalanlage ergänzen und neu speichern.';
+  outer.append(title,sub);label.append(inp,outer);parent.append(label);
+  inp.addEventListener('change',()=>{
+   if(inp.checked)portfolioSelection.add(item.id);else portfolioSelection.delete(item.id);
+   renderPortfolioRefinancings();renderPortfolio();
+  });
+ }
+ show('portfolioSelectionInfo',portfolioSelection.size+' Immobilien ausgewählt.');
+}
+function renderPortfolioRefinancings(){
+ const root=el('portfolioRefinancings');root.replaceChildren();
+ const chosen=readSavedInvestments().filter(x=>portfolioSelection.has(x.id));
+ let open=0;
+ for(const item of chosen){
+  const p=portfolioProperty(item);
+  if(!p.valid||p.loan<=0.005)continue;
+  const residual=portfolioResidual(p);
+  if(!Number.isFinite(residual)||residual<=0.005)continue;
+  open++;
+  if(!portfolioRefis[item.id])portfolioRefis[item.id]={enabled:false,rate:4,repay:2,fixed:10};
+  const refi=portfolioRefis[item.id],box=document.createElement('div');box.className='portfolio-refi';
+  const title=document.createElement('h4');title.textContent=p.name;
+  const hint=document.createElement('p');hint.className='portfolio-note';
+  hint.textContent='Voraussichtliche Restschuld '+money(residual)+' · reguläre Bindung endet '+(p.purchase.year+Math.floor((p.purchase.month+p.fixed*12)/12));
+  const toggle=document.createElement('label');toggle.className='portfolio-refi-toggle';
+  const ck=document.createElement('input');ck.type='checkbox';ck.checked=Boolean(refi.enabled);
+  const tx=document.createElement('span');tx.textContent='Anschlussfinanzierung simulieren';
+  ck.addEventListener('change',()=>{refi.enabled=ck.checked;renderPortfolioRefinancings();renderPortfolio()});
+  toggle.append(ck,tx);
+  box.append(title,hint,toggle);
+  if(refi.enabled){
+   const fields=document.createElement('div');fields.className='fields';fields.style.marginTop='10px';
+   for(const [key,label,unit] of [['rate','Neuer Sollzins','%'],['repay','Anfangstilgung','%'],['fixed','Neue Zinsbindung','Jahre']]){
+    const field=document.createElement('div');field.className='field';
+    const lbl=document.createElement('label');lbl.textContent=label;
+    const wrap=document.createElement('div');wrap.className='withunit';
+    const input=document.createElement('input');input.inputMode='decimal';input.value=String(refi[key]).replace('.',',');
+    const span=document.createElement('span');span.className='unit';span.textContent=unit;
+    input.addEventListener('input',()=>{
+     refi[key]=number(input.value);renderPortfolio();
+    });
+    wrap.append(input,span);field.append(lbl,wrap);fields.append(field);
+   }
+   box.append(fields);
+  }
+  root.append(box);
+ }
+ if(!open){
+  const p=document.createElement('p');p.className='portfolio-note';
+  p.textContent='Für die Auswahl ist derzeit keine Anschlussfinanzierung erforderlich.';root.append(p);
+ }
+}
+function propertyTimeline(p,s,refi,startYear,endYear){
+ const result={},firstMonth={year:startYear,month:0},last={year:endYear,month:11};
+ const initYear=Math.min(startYear,p.purchase.year);
+ const rawStart={year:initYear,month:0};
+ const ref=refi||{};
+ const termsValid=!ref.enabled||(Number.isFinite(ref.rate)&&ref.rate>=0&&ref.rate<=30
+  &&Number.isFinite(ref.repay)&&ref.repay>=0&&ref.repay<=100
+  &&Number.isInteger(ref.fixed)&&ref.fixed>=1&&ref.fixed<=40);
+ let balance=p.loan,rate=p.rate/1200,payment=p.loan*(p.rate+p.repay)/1200;
+ let unknown=false,termChanged=false,paused=false;
+ const loanFixed=p.fixed*12,refiStop=loanFixed+(Number(ref.fixed)||0)*12;
+ const snapshot=p.balance!==null&&p.status==='existing'?monthsApart(p.purchase,p.asOf):-1;
+ for(let yr=rawStart.year;yr<=endYear;yr++){
+  const o={year:yr,active:false,rent:0,cost:0,reserve:0,interest:0,payment:0,principal:0,
+   cash:0,tax:0,price:0,fullCost:0,debt:0,value:0,invested:0,complete:true};
+  for(let month=0;month<12;month++){
+   const m={year:yr,month},offset=monthsApart(p.purchase,m);
+   if(offset<0)continue;
+   o.active=true;
+   if(offset===0&&p.status==='planned')o.invested+=p.own;
+   if(snapshot===offset&&Number.isFinite(p.balance))balance=p.balance;
+   if(balance>0.005){
+    if(offset===loanFixed){
+     if(ref.enabled&&termsValid){
+      rate=ref.rate/1200;payment=balance*(ref.rate+ref.repay)/1200;termChanged=true;
+     }else unknown=true;
+    }
+    if(termChanged&&offset===refiStop)unknown=true;
+   }
+   if(!termsValid)unknown=true;
+   const elapsed=Math.max(0,monthsApart(p.asOf,m))/12;
+   const rent=p.rent*(1-p.vacancy/100)*Math.pow(1+s.rent/100,elapsed);
+   const expense=p.costs*Math.pow(1+s.inflation/100,elapsed);
+   const reserve=p.reserve*Math.pow(1+s.inflation/100,elapsed);
+   const deductible=p.deduct*Math.pow(1+s.inflation/100,elapsed);
+   o.rent+=rent;o.cost+=expense;o.reserve+=reserve;
+   if(!unknown){
+    const interest=balance>0.005?balance*rate:0;
+    const currentPayment=balance>0.005?Math.min(payment,balance+interest):0;
+    const principal=Math.max(0,currentPayment-interest);
+    balance=Math.max(0,balance-principal);
+    o.interest+=interest;o.payment+=currentPayment;o.principal+=principal;
+    const afa=p.price*p.building*p.afa/120000;
+    const taxEffect=-(rent-interest-afa-deductible)*p.taxRate/100;
+    o.tax+=taxEffect;o.cash+=rent-expense-reserve-currentPayment+taxEffect;
+   }else o.complete=false;
+  }
+  if(o.active){
+   const baseYear=p.status==='planned'?p.purchase:p.asOf;
+   const elapsed=Math.max(0,((yr-baseYear.year)*12+(11-baseYear.month)+1)/12);
+   o.value=p.market*Math.pow(1+s.value/100,elapsed);
+   o.debt=o.complete?balance:null;
+   o.price=p.price;o.fullCost=p.fullCost;
+  }
+  if(yr>=startYear)result[yr]=o;
+ }
+ return result;
+}
+function computePortfolio(){
+ const yy=new Date().getFullYear(),endYear=yy+30,scenario=portfolioScenario();
+ if(!portfolioScenarioValid(scenario))return {valid:false,reason:'Bitte realistische Prozentwerte eingeben: Inflation und Miete −10 bis +30 %, Immobilienwert −20 bis +30 %.'};
+ const items=readSavedInvestments().filter(x=>portfolioSelection.has(x.id));
+ if(!items.length)return {valid:false,reason:'Wähle zunächst eine oder mehrere gespeicherte Immobilien aus.'};
+ const properties=items.map(portfolioProperty);
+ if(properties.some(p=>!p.valid))return {valid:false,reason:'Mindestens eine Immobilie hat unvollständige Stammdaten. Bitte Kaufdatum und Datenstichtag im Kapitalanlage-Reiter prüfen.'};
+ const history=properties.map(p=>({p,years:propertyTimeline(p,scenario,portfolioRefis[p.id],yy,endYear)}));
+ const years=[];
+ for(let year=yy;year<=endYear;year++){
+  const rows=history.map(({p,years})=>({...years[year],p}));
+  const active=rows.filter(x=>x.active),complete=active.every(x=>x.complete);
+  const total=key=>active.reduce((n,row)=>n+row[key],0);
+  const value=total('value'),rent=total('rent'),cost=total('cost'),reserve=total('reserve');
+  const debt=complete?total('debt'):null;
+  const annualCash=complete?total('cash'):null;
+  const annualTax=complete?total('tax'):null;
+  years.push({year,rows,active:active.length,complete,value,rent,cost,reserve,
+   debt,cash:annualCash,tax:annualTax,principal:complete?total('principal'):null,
+   payment:complete?total('payment'):null,interest:complete?total('interest'):null,
+   invested:total('invested'),price:total('price'),fullCost:total('fullCost'),
+   gross:total('price')>0?rent/total('price')*100:null,
+   net:total('fullCost')>0?(rent-cost-reserve)/total('fullCost')*100:null,
+   equity:complete?value-debt:null});
+ }
+ return {valid:true,years,properties,scenario};
+}
+function displayPortfolio(){
+ const x=computePortfolio();portfolioProjection=x.valid?x.years:[];portfolioCurrent=x;
+ const selectedYear=Number(el('portfolioYear').value);
+ show('portfolioYearLabel',String(selectedYear));
+ const metricIds=['pCount','pValue','pDebt','pEquity','pRent','pCash','pGross','pNet',
+  'pPrincipal','pNewEquity','pCashBefore','pBreakYear'];
+ if(!x.valid){
+  metricIds.forEach(id=>show(id,'–'));
+  el('portfolioVerdict').className='portfolio-warning';show('portfolioVerdict',x.reason);
+  el('portfolioRows').replaceChildren();el('portfolioYearRows').replaceChildren();
+  drawPortfolioCharts();return;
+ }
+ const o=x.years.find(r=>r.year===selectedYear)||x.years[0];
+ const t=(n)=>n==null?'–':money(n);
+ show('pCount',String(o.active));
+ show('pValue',t(o.value));show('pDebt',t(o.debt));show('pEquity',t(o.equity));
+ show('pRent',t(o.rent/12));show('pCash',t(o.cash===null?null:o.cash/12));
+ show('pGross',o.gross==null?'–':percent(o.gross));
+ show('pNet',o.net==null?'–':percent(o.net));
+ show('pPrincipal',t(o.principal));show('pNewEquity',t(o.invested));
+ show('pCashBefore',t(o.cash===null?null:(o.cash-o.tax)/12));
+ let breakpoint=null;
+ for(let i=0;i<x.years.length;i++){
+  const arr=x.years.slice(i);
+  if(arr.every(r=>r.complete&&r.active>0&&r.cash>=-0.005)){breakpoint=x.years[i].year;break}
+ }
+ show('pBreakYear',breakpoint===null?'Nicht belegbar':String(breakpoint));
+ const verdict=el('portfolioVerdict');
+ if(!o.active){verdict.className='portfolio-warning';verdict.textContent='Im gewählten Jahr wurde noch keine der ausgewählten Immobilien gekauft.'}
+ else if(!o.complete){
+  const gaps=o.rows.filter(r=>r.active&&!r.complete).map(r=>r.p.name);
+  verdict.className='portfolio-warning';
+  verdict.textContent='Prognose unvollständig: Bei '+gaps.join(', ')+' fehlen Anschlussfinanzierungs-Konditionen oder die neue Zinsbindung endet vor '+selectedYear+'. Keine fiktiven Kreditraten angesetzt.';
+ }else{
+  verdict.className=o.cash>=-0.005?'portfolio-good':'portfolio-warning';
+  verdict.textContent=(o.cash>=-0.005?'Das Portfolio trägt sich im Jahr '+selectedYear+' nach geschätzten Steuern selbst.':'Im Jahr '+selectedYear+' benötigt das Portfolio nach geschätzten Steuern einen monatlichen Zuschuss.')+
+   ' Durchschnittlicher Cashflow: '+cents(o.cash/12)+'. Jahreswerte basieren auf aktuellen Mieten und Szenarioannahmen, nicht auf rekonstruierten Ist-Daten.';
+ }
+ const tbody=el('portfolioRows');tbody.replaceChildren();
+ const appendRow=(parent,columns)=>{
+  const tr=document.createElement('tr');
+  columns.forEach(text=>{const td=document.createElement('td');td.textContent=text;tr.append(td)});
+  parent.append(tr);
+ };
+ for(const r of o.rows){
+  appendRow(tbody,[r.p.name,r.active?(r.p.status==='planned'?'Neukauf':'Bestand'):'Noch nicht erworben',
+   r.active?t(r.rent):'–',r.active?t(r.complete?r.cash:null):'–',
+   r.active?t(r.debt):'–',r.active?t(r.value):'–']);
+ }
+ const yearsBody=el('portfolioYearRows');yearsBody.replaceChildren();
+ for(const r of x.years){
+  appendRow(yearsBody,[String(r.year),String(r.active),t(r.rent),t(r.cash),t(r.debt),t(r.equity)]);
+ }
+ drawPortfolioCharts();
+}
+function drawPortfolioCharts(){
+ const data=portfolioProjection;
+ for(const [id,key,stroke] of [['portfolioCashChart','cash','#316eb8'],['portfolioWealthChart','equity','#2f986f']]){
+  const canvas=el(id),rect=canvas.getBoundingClientRect();
+  if(!rect.width)continue;
+  const dpr=window.devicePixelRatio||1,w=rect.width,h=210;
+  canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
+  const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,w,h);ctx.font='11px system-ui';ctx.fillStyle='#62748c';
+  const L=52,R=14,T=15,B=29,innerW=w-L-R,innerH=h-T-B;
+  const actual=data.map((row,i)=>({i,v:key==='cash'?(row.cash==null?null:row.cash/12):row.equity}));
+  const values=actual.filter(x=>Number.isFinite(x.v)).map(x=>x.v);
+  if(!values.length){ctx.fillText('Keine vollständigen Projektionen verfügbar',15,30);continue}
+  const lo=Math.min(0,...values),hi=Math.max(0,...values),span=Math.max(1,hi-lo);
+  const xx=i=>L+(i/Math.max(1,data.length-1))*innerW,yy=v=>T+(hi-v)/span*innerH;
+  ctx.textBaseline='middle';
+  for(let t=0;t<=4;t++){
+   const val=lo+span*t/4,Y=yy(val);
+   ctx.beginPath();ctx.moveTo(L,Y);ctx.lineTo(w-R,Y);ctx.strokeStyle='#e2eaf3';ctx.lineWidth=1;ctx.stroke();
+   ctx.textAlign='right';ctx.fillText(Math.abs(val)>=1000?(val/1000).toFixed(0)+'k':Math.round(val),L-6,Y);
+  }
+  ctx.beginPath();let drawing=false;
+  for(const p of actual){
+   if(!Number.isFinite(p.v)){drawing=false;continue}
+   if(drawing)ctx.lineTo(xx(p.i),yy(p.v));else ctx.moveTo(xx(p.i),yy(p.v));
+   drawing=true;
+  }
+  ctx.lineWidth=2.5;ctx.strokeStyle=stroke;ctx.stroke();
+  ctx.textAlign='center';ctx.textBaseline='top';
+  [0,10,20,30].forEach(i=>ctx.fillText(String(data[0].year+i),xx(i),h-24));
+  const selected=Number(el('portfolioYear').value),k=selected-data[0].year;
+  if(k>=0&&k<data.length){
+   ctx.setLineDash([4,5]);ctx.strokeStyle='#9cabc0';ctx.beginPath();ctx.moveTo(xx(k),T);ctx.lineTo(xx(k),h-B);ctx.stroke();ctx.setLineDash([]);
+  }
+ }
+}
+function renderPortfolio(){displayPortfolio()}
+function renderPortfolioSaved(selected=''){
+ const items=getPortfolios().slice().sort((a,b)=>a.name.localeCompare(b.name,'de'));
+ const select=el('portfolioSaved'),prev=selected||select.value;
+ select.replaceChildren(new Option('– Portfolio auswählen –',''));
+ for(const item of items)select.add(new Option(item.name,item.id));
+ select.value=items.some(x=>x.id===prev)?prev:'';
+ el('portfolioLoad').disabled=!select.value;el('portfolioDelete').disabled=!select.value;
+}
+function portfolioCurrentRecord(){
+ return {id:'portfolio-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),
+  name:el('portfolioName').value.trim(),ids:[...portfolioSelection],
+  year:Number(el('portfolioYear').value),scenario:portfolioScenario(),
+  refinancing:JSON.parse(JSON.stringify(portfolioRefis)),date:new Date().toISOString()};
+}
+function portfolioSave(){
+ const item=portfolioCurrentRecord();
+ if(!item.name){portfolioMessage('Bitte einen Portfolionamen eingeben.',true);return}
+ if(!item.ids.length){portfolioMessage('Bitte mindestens eine Immobilie auswählen.',true);return}
+ if(!portfolioCurrent||!portfolioCurrent.valid){portfolioMessage('Bitte die Portfoliodaten und Szenarioannahmen prüfen.',true);return}
+ const items=getPortfolios(),old=items.find(x=>x.name.toLocaleLowerCase('de')===item.name.toLocaleLowerCase('de'));
+ if(old&&!window.confirm('Portfolio "'+old.name+'" überschreiben?'))return;
+ if(old){item.id=old.id;items.splice(items.indexOf(old),1,item)}else items.push(item);
+ if(storePortfolios(items)){renderPortfolioSaved(item.id);portfolioMessage('Portfolio gespeichert: '+item.name)}
+}
+function portfolioLoad(){
+ const item=getPortfolios().find(x=>x.id===el('portfolioSaved').value);
+ if(!item){portfolioMessage('Bitte ein gespeichertes Portfolio auswählen.',true);return}
+ el('portfolioName').value=item.name;
+ portfolioSelection=new Set(item.ids);
+ const scenario=item.scenario||{};
+ for(const [key,id] of [['inflation','portfolioInflation'],['rent','portfolioRentGrowth'],['value','portfolioValueGrowth']]){
+  if(Number.isFinite(scenario[key]))el(id).value=String(scenario[key]).replace('.',',');
+ }
+ const yy=new Date().getFullYear();
+ el('portfolioYear').value=String(Math.max(yy,Math.min(yy+30,Number(item.year)||yy)));
+ portfolioRefis=item.refinancing&&typeof item.refinancing==='object'&&!Array.isArray(item.refinancing)?item.refinancing:{};
+ renderPortfolioChoices();renderPortfolioRefinancings();renderPortfolio();
+ portfolioMessage('Portfolio geladen: '+item.name);
+}
+function portfolioDelete(){
+ const id=el('portfolioSaved').value,item=getPortfolios().find(x=>x.id===id);
+ if(!item){portfolioMessage('Bitte ein Portfolio auswählen.',true);return}
+ if(!window.confirm('Portfolio "'+item.name+'" löschen?'))return;
+ if(storePortfolios(getPortfolios().filter(x=>x.id!==id))){
+  renderPortfolioSaved();portfolioMessage('Portfolio gelöscht: '+item.name);
+ }
+}
+
 el('useOwner').addEventListener('click',()=>setInvestmentTab(false));
 el('useInvestor').addEventListener('click',()=>setInvestmentTab(true));
-window.addEventListener('resize',draw);update();
+el('usePortfolio').addEventListener('click',()=>setAppTab('portfolio'));
+window.addEventListener('resize',()=>{draw();if(!el('portfolioPanel').classList.contains('gone'))drawPortfolioCharts()});update();
 })();
 </script></body></html>
