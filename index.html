@@ -328,10 +328,14 @@ function renderInvestment(){
   ['investPrincipalYear',principalYear],['investWealthYear',wealthYear]]
   .forEach(([id,val])=>show(id,signed(val)));
  const avgBefore=cashYearPre/12, avgAfter=cashYearAfterRegular/12;
- if(avgBefore>=-0.005){
+ if(avgBefore>=-0.005 && avgAfter>=-0.005){
   verdict.className='investment-verdict good';
-  show('investAssessment','Ja – die Wohnung trägt sich vor Steuern');
+  show('investAssessment','Ja – vor und nach Steuern selbsttragend');
   show('investAssessmentDetail','Im ersten Jahr bleiben im Mittel '+signed(avgBefore)+'/Monat vor Steuern und '+signed(avgAfter)+'/Monat nach geschätzter Steuerwirkung übrig. Freiwillige Sondertilgungen sind separat ausgewiesen.');
+ }else if(avgBefore>=-0.005){
+  verdict.className='investment-verdict caution';
+  show('investAssessment','Vor Steuern selbsttragend, nach Steuern nicht');
+  show('investAssessmentDetail','Vor Steuern bleiben durchschnittlich '+signed(avgBefore)+'/Monat. Nach geschätzter Steuerbelastung fehlen jedoch '+cents(-avgAfter)+'/Monat; ohne zusätzliche Mittel ist die Anlage nach Steuern nicht selbsttragend.');
  }else if(avgAfter>=-0.005){
   verdict.className='investment-verdict caution';
   show('investAssessment','Nur rechnerisch nach Steuern selbsttragend');
