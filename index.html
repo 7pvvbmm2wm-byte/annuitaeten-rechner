@@ -33,6 +33,23 @@
 .investment-flow .cost.emphasis{border-top:2px solid #cad9ed;padding-top:12px;margin-top:5px;font-weight:800}
 .investment-flow .cost.muted{font-size:12px;color:#667991}
 @media(max-width:420px){.investment-metrics{grid-template-columns:1fr}.investment-extra{padding:11px}.investment-flow{padding:11px}}
+
+/* Immobilienverwaltung: ausschliesslich im Kapitalanlage-Reiter */
+.invest-property-manager{border:1px solid #d4e2f4;border-radius:14px;background:#f3f8ff;padding:16px;margin:18px 0}
+.invest-property-manager h3{margin:0 0 7px;font-size:17px;color:#24466f}
+.invest-property-manager .fields{margin-top:15px}
+.invest-property-manager select{width:100%;min-height:46px;padding:9px 12px;border:1px solid #d8e2ef;border-radius:11px;background:white;color:#193451;font:inherit;font-size:15px}
+.invest-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:13px}
+.invest-actions button{flex:1 1 155px;padding:12px 13px;border-radius:10px;font-weight:700;border:1px solid #8caddb;background:#e5effe;color:#204c89}
+.invest-actions button.primary-action{background:#24558e;border-color:#24558e;color:white}
+.invest-actions button:disabled{opacity:.5;cursor:not-allowed}
+.invest-action-note{margin:11px 0 0;color:#61748e;font-size:12px;line-height:1.5}
+.invest-save-status{font-size:12px;font-weight:700;color:#24558e;min-height:18px;margin:10px 0 0;line-height:1.45}
+.invest-save-status.error{color:#a34227}
+.invest-backup{margin-top:13px;padding-top:12px;border-top:1px solid #d8e5f6}
+.invest-backup summary{font-size:13px;font-weight:750;color:#325e91;cursor:pointer}
+.invest-backup .invest-actions button{font-size:13px;flex-basis:150px}
+@media(max-width:420px){.invest-property-manager{padding:12px}.invest-actions button{flex-basis:100%}}
 </style>
 </head>
 <body><div class="shell">
@@ -65,6 +82,32 @@
 <section class="card gone" id="investPanel" aria-labelledby="investTitle">
 <div class="section"><span class="dot">4</span><span id="investTitle">Kapitalanlage · Monatsüberschlag</span></div>
 <p class="sub">Darlehensrate und Zinsen werden aus dem bestehenden Rechner übernommen. Die Monatsübersicht zeigt Monat 1; das zusätzliche Dashboard bewertet das erste volle Vermietungsjahr.</p>
+<div class="invest-property-manager" aria-label="Immobilien speichern und Berichte exportieren">
+  <h3>Immobilie speichern &amp; PDF-Bericht</h3>
+  <p class="investment-note" style="margin-top:0">Mehrere Wohnungen auf diesem Gerät speichern, später erneut laden oder eine Bewertung als PDF herunterladen.</p>
+  <div class="fields">
+    <div class="field wide"><label for="investPropertyName">Name / Adresse der Immobilie</label><input id="investPropertyName" maxlength="100" placeholder="z. B. Nürnberg – Pilotystraße" autocomplete="off"></div>
+    <div class="field wide"><label for="investSavedList">Gespeicherte Immobilien</label><select id="investSavedList"><option value="">– Immobilie auswählen –</option></select></div>
+  </div>
+  <div class="invest-actions">
+    <button class="primary-action" type="button" id="investSave">Immobilie speichern</button>
+    <button type="button" id="investLoad">Laden</button>
+    <button type="button" id="investDelete">Löschen</button>
+    <button type="button" id="investPdf">PDF herunterladen</button>
+  </div>
+  <details class="invest-backup">
+    <summary>Sicherung &amp; Gerätewechsel (.json)</summary>
+    <div class="invest-actions">
+      <button type="button" id="investBackup">Alle Immobilien sichern</button>
+      <button type="button" id="investRestore">Sicherung einlesen</button>
+      <input id="investBackupFile" type="file" accept=".json,application/json" style="display:none">
+    </div>
+    <p class="investment-note">Die JSON-Sicherung kann auch auf einem anderen Gerät eingelesen werden. Das PDF enthält dagegen nur den Bericht, nicht wiederherstellbare Eingabedaten.</p>
+  </details>
+  <p id="investSaveStatus" class="invest-save-status" role="status" aria-live="polite"></p>
+  <p class="invest-action-note">Lokale Speicherung im Browser (kein Online-Konto und keine Synchronisierung). Beim Löschen von Browserdaten können die gespeicherten Immobilien verloren gehen. Nutze für eine dauerhafte Sicherung zusätzlich die JSON-Datei.</p>
+</div>
+
 <div class="fields" style="margin-top:17px">
 <div class="field"><label for="investRent">Kaltmiete monatlich</label><div class="withunit"><input id="investRent" inputmode="decimal" value="1.000"><span class="unit">€</span></div></div>
 <div class="field"><label for="investCosts">Nicht umlagefähige Kosten monatlich</label><div class="withunit"><input id="investCosts" inputmode="decimal" value="150"><span class="unit">€</span></div></div>
@@ -422,6 +465,303 @@ const rows=[[(monthly?'Monat':'Jahr'),'Gesamtzahlung EUR','Zinsen EUR','Regulaer
 const blob=new Blob(['\ufeff'+rows.map(x=>x.join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'});
 const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=monthly?'tilgungsplan-monatlich.csv':'tilgungsplan-jaehrlich.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 });
+
+const INVESTMENT_STORAGE_KEY='annuitaeten-rechner.immobilien.v1';
+const investmentFields=[...inputs,...investInputs,'extra','marketTenure'];
+function setInvestmentSaveStatus(message,isError=false){
+ const status=el('investSaveStatus'); status.textContent=message;
+ status.classList.toggle('error',isError);
+}
+function readSavedInvestments(){
+ try{
+  const raw=window.localStorage.getItem(INVESTMENT_STORAGE_KEY);
+  if(!raw)return [];
+  const entries=JSON.parse(raw);
+  return Array.isArray(entries)?entries.filter(item=>item&&typeof item.id==='string'&&typeof item.name==='string'&&item.values&&typeof item.values==='object'):[];
+ }catch(e){
+  setInvestmentSaveStatus('Gespeicherte Immobilien können auf diesem Gerät momentan nicht gelesen werden.',true);
+  return [];
+ }
+}
+function persistSavedInvestments(entries){
+ try{
+  window.localStorage.setItem(INVESTMENT_STORAGE_KEY,JSON.stringify(entries));
+  return true;
+ }catch(e){
+  setInvestmentSaveStatus('Speichern im Browser nicht möglich. Prüfe den privaten Modus oder den verfügbaren Speicher.',true);
+  return false;
+ }
+}
+function renderSavedInvestments(selectedId=''){
+ const list=el('investSavedList');
+ const records=readSavedInvestments().slice().sort((a,b)=>a.name.localeCompare(b.name,'de'));
+ const previous=selectedId||list.value;
+ list.replaceChildren(new Option('– Immobilie auswählen –',''));
+ for(const item of records)list.add(new Option(item.name,item.id));
+ list.value=records.some(x=>x.id===previous)?previous:'';
+ el('investLoad').disabled=!list.value;
+ el('investDelete').disabled=!list.value;
+}
+function investmentInputsValid(){
+ const p=Object.fromEntries(inputs.map(id=>[id,v(id)]));
+ const financeGood=Object.values(p).every(x=>Number.isFinite(x)&&x>=0)
+  && p.price>0&&p.tax<=100&&p.notary<=100&&p.broker<=100&&p.equityPct<=100
+  && p.interest<=50&&p.repay<=100&&Number.isInteger(p.fixed)&&p.fixed>=1&&p.fixed<=50;
+ const iv=investInputs.map(v);
+ const invGood=iv.every(x=>Number.isFinite(x)&&x>=0)
+  && iv[2]<=100&&iv[3]<=100&&iv[4]<=100&&iv[5]<=100&&iv[7]<=iv[1];
+ return financeGood&&invGood&&Number.isFinite(v('extra'))&&v('extra')>=0&&data!==null;
+}
+function captureInvestment(name){
+ const values=Object.fromEntries(investmentFields.map(id=>[id,el(id).value]));
+ return {id:'obj-'+Date.now()+'-'+Math.random().toString(36).slice(2,9),
+  name,date:new Date().toISOString(),values,equityMode:mode};
+}
+function saveInvestment(){
+ const name=el('investPropertyName').value.trim();
+ if(!name){setInvestmentSaveStatus('Bitte zuerst einen Namen für die Wohnung eingeben.',true);return}
+ if(!investmentInputsValid()){setInvestmentSaveStatus('Bitte vor dem Speichern die Finanzierungs- und Kapitalanlage-Eingaben prüfen.',true);return}
+ const entries=readSavedInvestments();
+ const matched=entries.find(x=>x.name.trim().toLocaleLowerCase('de')===name.toLocaleLowerCase('de'));
+ if(matched&&!window.confirm('Die Immobilie "'+matched.name+'" bereits gespeichert. Aktuelle Werte überschreiben?'))return;
+ const item=captureInvestment(name);
+ if(matched){item.id=matched.id;entries.splice(entries.indexOf(matched),1,item)}
+ else entries.push(item);
+ if(persistSavedInvestments(entries)){
+  renderSavedInvestments(item.id);
+  setInvestmentSaveStatus(matched?'Immobilie aktualisiert: '+name:'Immobilie gespeichert: '+name);
+ }
+}
+function loadInvestmentRecord(item){
+ if(!item||!item.values||typeof item.values!=='object')return false;
+ for(const id of investmentFields){
+  if(Object.prototype.hasOwnProperty.call(item.values,id)&&['string','number'].includes(typeof item.values[id])){
+   el(id).value=String(item.values[id]);
+  }
+ }
+ mode=item.equityMode==='pct'?'pct':'euro';
+ el('fieldEuro').classList.toggle('gone',mode!=='euro');
+ el('fieldPct').classList.toggle('gone',mode!=='pct');
+ el('modeEuro').classList.toggle('active',mode==='euro');
+ el('modePct').classList.toggle('active',mode==='pct');
+ el('marketApplied').classList.add('gone');
+ monthSelected=1;
+ update();
+ setInvestmentTab(true);
+ el('investPropertyName').value=item.name||'';
+ return true;
+}
+function loadInvestment(){
+ const item=readSavedInvestments().find(x=>x.id===el('investSavedList').value);
+ if(!item){setInvestmentSaveStatus('Bitte eine gespeicherte Immobilie auswählen.',true);return}
+ if(loadInvestmentRecord(item)){setInvestmentSaveStatus('Immobilie geladen: '+item.name)}
+}
+function deleteInvestment(){
+ const list=el('investSavedList');
+ const entries=readSavedInvestments();
+ const item=entries.find(x=>x.id===list.value);
+ if(!item){setInvestmentSaveStatus('Bitte eine gespeicherte Immobilie auswählen.',true);return}
+ if(!window.confirm('Immobilie "'+item.name+'" endgültig aus diesem Browser löschen?'))return;
+ const remaining=entries.filter(x=>x.id!==item.id);
+ if(persistSavedInvestments(remaining)){
+  renderSavedInvestments('');
+  setInvestmentSaveStatus('Gespeicherte Immobilie gelöscht: '+item.name);
+ }
+}
+function investSafeName(name){
+ return (name||'Kapitalanlage').replace(/[\\/:*?"<>|]/g,'-').replace(/\s+/g,' ').trim().slice(0,70)||'Kapitalanlage';
+}
+function downloadInvestmentBlob(blob,filename){
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement('a');a.href=url;a.download=filename;
+ document.body.appendChild(a);a.click();a.remove();
+ window.setTimeout(()=>URL.revokeObjectURL(url),15000);
+}
+function exportInvestmentBackup(){
+ const entries=readSavedInvestments();
+ if(!entries.length){setInvestmentSaveStatus('Noch keine Immobilien gespeichert.',true);return}
+ const content={format:'annuitaeten-immobilien-v1',exportedAt:new Date().toISOString(),properties:entries};
+ const blob=new Blob([JSON.stringify(content,null,2)],{type:'application/json;charset=utf-8'});
+ downloadInvestmentBlob(blob,'immobilien-sicherung.json');
+ setInvestmentSaveStatus(entries.length+' Immobilie(n) als JSON-Sicherung exportiert.');
+}
+function importInvestmentBackup(file){
+ if(!file)return;
+ file.text().then(text=>{
+  const json=JSON.parse(text);
+  if(!json||json.format!=='annuitaeten-immobilien-v1'||!Array.isArray(json.properties))throw Error('Format');
+  const added=json.properties.filter(item=>item&&typeof item.name==='string'&&item.name.trim()
+   &&item.values&&typeof item.values==='object'&&!Array.isArray(item.values));
+  if(added.length!==json.properties.length||added.length>500)throw Error('Daten');
+  const records=readSavedInvestments();
+  const conflicts=added.filter(i=>records.some(e=>e.name.trim().toLocaleLowerCase('de')===i.name.trim().toLocaleLowerCase('de')));
+  if(conflicts.length&&!window.confirm(conflicts.length+' gleichnamige Immobilie(n) überschreiben?'))return;
+  const imported=[];
+  for(const i of added){
+   const name=i.name.trim().slice(0,100);
+   const cleanValues={};
+   for(const field of investmentFields){
+    if(['string','number'].includes(typeof i.values[field]))cleanValues[field]=String(i.values[field]).slice(0,100);
+   }
+   const found=records.findIndex(e=>e.name.trim().toLocaleLowerCase('de')===name.toLocaleLowerCase('de'));
+   const id=found>=0?records[found].id:'obj-'+Date.now()+'-'+Math.random().toString(36).slice(2,9);
+   const item={id,name,date:new Date().toISOString(),equityMode:i.equityMode==='pct'?'pct':'euro',values:cleanValues};
+   if(found>=0)records.splice(found,1,item);else records.push(item);
+   imported.push(item);
+  }
+  if(persistSavedInvestments(records)){
+   renderSavedInvestments(imported.length?imported[0].id:'');
+   setInvestmentSaveStatus(imported.length+' Immobilie(n) aus der Sicherung importiert.');
+  }
+ }).catch(()=>setInvestmentSaveStatus('Ungültige JSON-Sicherung. Bitte die exportierte Sicherungsdatei wählen.',true));
+}
+/* Offline-fähiger PDF-Generator mit A4, Helvetica und Windows-1252-Zeichensatz. */
+function investmentPdfBytes(propertyName){
+ const textOf=id=>el(id).textContent.trim();
+ const inputOf=id=>el(id).value.trim();
+ const dt=new Intl.DateTimeFormat('de-DE',{dateStyle:'medium'}).format(new Date());
+ const pg=[];
+ let lines=[],y=0;
+ const ansiMap={'€':128,'‚':130,'ƒ':131,'„':132,'…':133,'†':134,'‡':135,
+  'ˆ':136,'‰':137,'Š':138,'‹':139,'Œ':140,'Ž':142,'‘':145,'’':146,'“':147,'”':148,
+  '•':149,'–':150,'—':151,'˜':152,'™':153,'š':154,'›':155,'œ':156,'ž':158,'Ÿ':159};
+ function winAnsi(text){
+  let out='';
+  for(const ch of String(text)){
+   const n=ch.charCodeAt(0);
+   out+=String.fromCharCode((n>=32&&n<=255)||(n===10)?n:(ansiMap[ch]||63));
+  }
+  return out;
+ }
+ function lit(s){return '('+winAnsi(s).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)').replace(/\n/g,' ')+')'}
+ function draw(x,yy,s,sz=10,bold=false,blue=false){
+  lines.push('BT /'+(bold?'F2':'F1')+' '+sz+' Tf '+(blue?'0.13 0.30 0.52':'0.14 0.21 0.31')+
+    ' rg 1 0 0 1 '+x.toFixed(1)+' '+yy.toFixed(1)+' Tm '+lit(s)+' Tj ET');
+ }
+ function separator(yy){lines.push('0.85 0.89 0.94 RG 0.6 w 40 '+yy.toFixed(1)+' m 555 '+yy.toFixed(1)+' l S')}
+ function start(){
+  if(lines.length)pg.push(lines);
+  lines=[];y=789;
+  draw(40,816,'IMMOBILIEN-KAPITALANLAGE',10,true,true);
+  separator(806);
+  draw(40,787,'Immobilienbewertung: '+String(propertyName).slice(0,69),17,true);
+  draw(40,768,'Erstellt am '+dt+' | Finanzierung und Wirtschaftlichkeit - Jahr 1',9);
+  y=747;
+ }
+ function ensure(h){if(y-h<65)start()}
+ function section(title){
+  ensure(45);y-=10;draw(40,y,title,12,true,true);y-=11;separator(y-4);y-=18;
+ }
+ function row(label,value){
+  ensure(18);
+  const lab=label.length>64?label.slice(0,61)+'...':label;
+  draw(42,y,lab,9);draw(418,y,String(value).slice(0,28),9,true);
+  y-=17;
+ }
+ function block(text){
+  const words=String(text).split(/\s+/);
+  let buf='';
+  for(const word of words){
+   if((buf+' '+word).length>94&&buf){ensure(15);draw(42,y,buf,9);y-=14;buf=word}
+   else buf+=(buf?' ':'')+word;
+  }
+  if(buf){ensure(15);draw(42,y,buf,9);y-=16}
+ }
+ start();
+ section('Objekt und Finanzierung');
+ row('Kaufpreis',textOf('costPrice'));
+ row('Erwerbskosten inklusive Kaufnebenkosten',textOf('total'));
+ row('Eigenkapital',textOf('equityTop'));
+ row('Darlehensbetrag',textOf('loanTop'));
+ row('Monatliche Darlehensrate',textOf('monthly'));
+ row('Sollzins / anfaengliche Tilgung',inputOf('interest')+' % / '+inputOf('repay')+' %');
+ row('Zinsbindung',inputOf('fixed')+' Jahre');
+ row('Sondertilgung / Jahr',textOf('extraVal'));
+ section('Miete, laufende Kosten und Steuern');
+ row('Kaltmiete / Monat',inputOf('investRent')+' EUR');
+ row('Leerstand / Mietausfall',inputOf('investVacancy')+' %');
+ row('Nicht umlagefaehige Kosten / Monat',inputOf('investCosts')+' EUR');
+ row('Zusaetzliche Instandhaltung / Monat',inputOf('investReserve')+' EUR');
+ row('Steuerlich abziehbare Kosten / Monat',inputOf('investDeductible')+' EUR');
+ row('Gebaeudeanteil / AfA-Satz',inputOf('investBuilding')+' % / '+inputOf('investAfa')+' %');
+ row('Steuersatz (angenommen)',inputOf('investTaxRate')+' %');
+ section('Wirtschaftliche Kennzahlen');
+ row('Bruttomietrendite',textOf('investGrossYield'));
+ row('Nettomietrendite',textOf('investNetYield'));
+ row('Kaufpreisfaktor',textOf('investPriceFactor'));
+ row('Eigenkapitalrendite im 1. Jahr',textOf('investEquityYield'));
+ row('Break-even-Kaltmiete / Monat',textOf('investBreakEven'));
+ row('Schuldendienstdeckungsgrad vor Steuern',textOf('investDebtCoverage'));
+ section('Liquiditaet und Vermoegen - Jahr 1');
+ for(const [label,id] of [
+  ['Kaltmiete nach Mietausfall','investNetRentYear'],
+  ['Nicht umlagefaehige Kosten','investTotalCostsYear'],
+  ['Zusaetzliches Instandhaltungsbudget','investReserveYear'],
+  ['Regulaere Darlehensraten','investDebtYear'],
+  ['Cashflow vor Steuern, ohne Sondertilgung','investCashYearPre'],
+  ['Geschaetzte Steuerwirkung','investTaxYear'],
+  ['Sondertilgung','investSpecialYear'],
+  ['Cashflow nach Steuern und Sondertilgung','investCashYear'],
+  ['Tilgung einschliesslich Sondertilgung','investPrincipalYear'],
+  ['Cashflow plus Schuldenabbau','investWealthYear']
+ ])row(label,textOf(id));
+ section('Gesamtbewertung');
+ block(textOf('investAssessment'));
+ block(textOf('investAssessmentDetail'));
+ y-=5;block('Hinweis: Vereinfachte Modellrechnung, keine Steuer- oder Anlageberatung. Der Steuereffekt ist nicht garantiert. Preisentwicklung, ausserordentliche Reparaturen, Mieterhoehungen und Anschlusszinsrisiken sind nicht modelliert.');
+ pg.push(lines);
+ const objects=['','', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+  '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'];
+ const kids=[];
+ for(let i=0;i<pg.length;i++){
+  const p=pg[i].slice();
+  p.push('BT /F1 8 Tf 0.45 0.52 0.62 rg 1 0 0 1 42 37 Tm '+lit('Annuitaetendarlehen-Rechner | '+dt)+' Tj ET');
+  p.push('BT /F1 8 Tf 0.45 0.52 0.62 rg 1 0 0 1 504 37 Tm '+lit('Seite '+(i+1)+' / '+pg.length)+' Tj ET');
+  const stream=p.join('\n')+'\n';
+  const contentId=objects.push('<< /Length '+stream.length+' >>\nstream\n'+stream+'endstream');
+  const pageId=objects.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents '+contentId+' 0 R >>');
+  kids.push(pageId+' 0 R');
+ }
+ objects[0]='<< /Type /Catalog /Pages 2 0 R >>';
+ objects[1]='<< /Type /Pages /Kids [ '+kids.join(' ')+' ] /Count '+pg.length+' >>';
+ let output='%PDF-1.4\n%\xE2\xE3\xCF\xD3\n';
+ const offsets=[0];
+ for(let i=0;i<objects.length;i++){
+  offsets.push(output.length);
+  output+=(i+1)+' 0 obj\n'+objects[i]+'\nendobj\n';
+ }
+ const xref=output.length;
+ output+='xref\n0 '+(objects.length+1)+'\n0000000000 65535 f \n';
+ for(let i=1;i<offsets.length;i++)output+=String(offsets[i]).padStart(10,'0')+' 00000 n \n';
+ output+='trailer\n<< /Size '+(objects.length+1)+' /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF';
+ const bytes=new Uint8Array(output.length);
+ for(let i=0;i<output.length;i++)bytes[i]=output.charCodeAt(i)&255;
+ return bytes;
+}
+function downloadInvestmentPdf(){
+ if(!investmentInputsValid()){
+  setInvestmentSaveStatus('Bitte für den PDF-Bericht zuerst gültige Eingaben im Rechner und Kapitalanlage-Reiter verwenden.',true);
+  return;
+ }
+ const name=el('investPropertyName').value.trim()||'Immobilie';
+ const bytes=investmentPdfBytes(name);
+ downloadInvestmentBlob(new Blob([bytes],{type:'application/pdf'}),'Immobilienbewertung-'+investSafeName(name)+'.pdf');
+ setInvestmentSaveStatus('PDF-Bewertung erstellt: '+name);
+}
+
+el('investSave').addEventListener('click',saveInvestment);
+el('investLoad').addEventListener('click',loadInvestment);
+el('investDelete').addEventListener('click',deleteInvestment);
+el('investPdf').addEventListener('click',downloadInvestmentPdf);
+el('investBackup').addEventListener('click',exportInvestmentBackup);
+el('investRestore').addEventListener('click',()=>el('investBackupFile').click());
+el('investBackupFile').addEventListener('change',event=>{
+ const file=event.target.files&&event.target.files[0];
+ importInvestmentBackup(file);
+ event.target.value='';
+});
+el('investSavedList').addEventListener('change',()=>renderSavedInvestments());
+renderSavedInvestments();
 investInputs.forEach(id=>el(id).addEventListener('input',renderInvestment));
 el('useOwner').addEventListener('click',()=>setInvestmentTab(false));
 el('useInvestor').addEventListener('click',()=>setInvestmentTab(true));
