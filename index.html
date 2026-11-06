@@ -686,6 +686,7 @@ function saveInvestment(){
  else entries.push(item);
  if(persistSavedInvestments(entries)){
   renderSavedInvestments(item.id);
+  if(portfolioInitialized){renderPortfolioChoices();renderPortfolioRefinancings();renderPortfolio();}
   setInvestmentSaveStatus(matched?'Immobilie aktualisiert: '+name:'Immobilie gespeichert: '+name);
  }
 }
@@ -728,6 +729,8 @@ function deleteInvestment(){
  const remaining=entries.filter(x=>x.id!==item.id);
  if(persistSavedInvestments(remaining)){
   renderSavedInvestments('');
+  portfolioSelection.delete(item.id);
+  if(portfolioInitialized){renderPortfolioChoices();renderPortfolioRefinancings();renderPortfolio();}
   setInvestmentSaveStatus('Gespeicherte Immobilie gelöscht: '+item.name);
  }
 }
@@ -743,10 +746,10 @@ function downloadInvestmentBlob(blob,filename){
 function exportInvestmentBackup(){
  const entries=readSavedInvestments();
  if(!entries.length){setInvestmentSaveStatus('Noch keine Immobilien gespeichert.',true);return}
- const content={format:'annuitaeten-immobilien-v1',exportedAt:new Date().toISOString(),properties:entries};
+ const content={format:'annuitaeten-immobilien-v1',exportedAt:new Date().toISOString(),properties:entries,portfolios:getPortfolios()};
  const blob=new Blob([JSON.stringify(content,null,2)],{type:'application/json;charset=utf-8'});
  downloadInvestmentBlob(blob,'immobilien-sicherung.json');
- setInvestmentSaveStatus(entries.length+' Immobilie(n) als JSON-Sicherung exportiert.');
+ setInvestmentSaveStatus(entries.length+' Immobilie(n) und '+getPortfolios().length+' Portfolio(s) als JSON-Sicherung exportiert.');
 }
 function importInvestmentBackup(file){
  if(!file)return;
@@ -757,9 +760,11 @@ function importInvestmentBackup(file){
    &&item.values&&typeof item.values==='object'&&!Array.isArray(item.values));
   if(added.length!==json.properties.length||added.length>500)throw Error('Daten');
   const records=readSavedInvestments();
+  const importedPortfolios=Array.isArray(json.portfolios)?json.portfolios:[];
+  if(importedPortfolios.length>500||importedPortfolios.some(p=>!p||typeof p.name!=='string'||!Array.isArray(p.ids)))throw Error('Portfolioformat');
   const conflicts=added.filter(i=>records.some(e=>e.name.trim().toLocaleLowerCase('de')===i.name.trim().toLocaleLowerCase('de')));
   if(conflicts.length&&!window.confirm(conflicts.length+' gleichnamige Immobilie(n) überschreiben?'))return;
-  const imported=[];
+  const imported=[],idMap=new Map();
   for(const i of added){
    const name=i.name.trim().slice(0,100);
    const cleanValues={};
@@ -770,11 +775,38 @@ function importInvestmentBackup(file){
    const id=found>=0?records[found].id:'obj-'+Date.now()+'-'+Math.random().toString(36).slice(2,9);
    const item={id,name,date:new Date().toISOString(),equityMode:i.equityMode==='pct'?'pct':'euro',values:cleanValues};
    if(found>=0)records.splice(found,1,item);else records.push(item);
+   if(typeof i.id==='string')idMap.set(i.id,id);
    imported.push(item);
   }
   if(persistSavedInvestments(records)){
+   let portCount=0;
+   if(importedPortfolios.length){
+    const all=getPortfolios(),ids=new Set(records.map(i=>i.id));
+    for(const entry of importedPortfolios){
+     const name=entry.name.trim().slice(0,100);
+     if(!name)continue;
+     const selected=[...new Set(entry.ids.map(id=>idMap.get(id)||id).filter(id=>ids.has(id)))];
+     if(!selected.length)continue;
+     const ix=all.findIndex(p=>p.name.trim().toLocaleLowerCase('de')===name.toLocaleLowerCase('de'));
+     const item={id:ix<0?'portfolio-'+Date.now()+'-'+Math.random().toString(36).slice(2,9):all[ix].id,
+      name,ids:selected,year:Number(entry.year)||new Date().getFullYear(),
+      scenario:entry.scenario&&typeof entry.scenario==='object'?entry.scenario:{inflation:2,rent:2,value:1.5},
+      refinancing:{},date:new Date().toISOString()};
+     if(entry.refinancing&&typeof entry.refinancing==='object'){
+      for(const [oldId,terms] of Object.entries(entry.refinancing)){
+       const newId=idMap.get(oldId)||oldId;
+       if(ids.has(newId)&&terms&&typeof terms==='object')
+        item.refinancing[newId]={enabled:Boolean(terms.enabled),rate:Number(terms.rate),repay:Number(terms.repay),fixed:Number(terms.fixed)};
+      }
+     }
+     if(ix<0)all.push(item);else all.splice(ix,1,item);
+     portCount++;
+    }
+    storePortfolios(all);
+   }
    renderSavedInvestments(imported.length?imported[0].id:'');
-   setInvestmentSaveStatus(imported.length+' Immobilie(n) aus der Sicherung importiert.');
+   if(portfolioInitialized){renderPortfolioChoices();renderPortfolioSaved();renderPortfolioRefinancings();renderPortfolio();}
+   setInvestmentSaveStatus(imported.length+' Immobilie(n) und '+portCount+' Portfolio(s) aus der Sicherung importiert.');
   }
  }).catch(()=>setInvestmentSaveStatus('Ungültige JSON-Sicherung. Bitte die exportierte Sicherungsdatei wählen.',true));
 }
@@ -1323,6 +1355,13 @@ function portfolioDelete(){
 el('useOwner').addEventListener('click',()=>setInvestmentTab(false));
 el('useInvestor').addEventListener('click',()=>setInvestmentTab(true));
 el('usePortfolio').addEventListener('click',()=>setAppTab('portfolio'));
+el('portfolioYear').addEventListener('input',renderPortfolio);
+for(const id of ['portfolioInflation','portfolioRentGrowth','portfolioValueGrowth'])
+ el(id).addEventListener('input',renderPortfolio);
+el('portfolioSave').addEventListener('click',portfolioSave);
+el('portfolioLoad').addEventListener('click',portfolioLoad);
+el('portfolioDelete').addEventListener('click',portfolioDelete);
+el('portfolioSaved').addEventListener('change',()=>renderPortfolioSaved());
 window.addEventListener('resize',()=>{draw();if(!el('portfolioPanel').classList.contains('gone'))drawPortfolioCharts()});update();
 })();
 </script></body></html>
