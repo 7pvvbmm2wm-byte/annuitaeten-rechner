@@ -120,6 +120,38 @@
 </div><div style="margin-top:22px"><div class="rangeinfo"><label for="extra">Jährliche Sondertilgung</label><strong id="extraVal">0 €</strong></div><input id="extra" class="range" type="range" min="0" max="20000" step="500" value="0"><p class="hint">Im Modell am Jahresende; nur soweit vertraglich zulässig.</p></div>
 <div id="marketApplied" class="market-applied gone" role="status" aria-live="polite"></div><div id="warning" class="warning" role="status"></div><div class="resetwrap"><button id="reset" class="secondary" type="button">↺ Standardwerte wiederherstellen</button></div>
 </section>
+<section class="card" id="ownerManager">
+ <div class="section"><span class="dot">4</span>Eigenheim speichern &amp; exportieren</div>
+ <p class="portfolio-note">Eigenheime erscheinen auch im Portfolio. Dort werden Immobilienwert, Darlehen, Tilgung und laufende Kosten berücksichtigt – ohne Mieteinnahmen.</p>
+ <div class="fields">
+  <div class="field wide"><label for="ownerName">Name des Eigenheims</label><input id="ownerName" maxlength="100" placeholder="z. B. Eigenheim Karlsruhe"></div>
+  <div class="field wide"><label for="ownerAddress">Adresse</label><input id="ownerAddress" maxlength="180" placeholder="Straße, PLZ, Ort"></div>
+  <div class="field"><label for="ownerStatus">Immobilienstatus</label><select id="ownerStatus"><option value="existing">Bestand</option><option value="planned">Geplanter Kauf</option></select></div>
+  <div class="field"><label for="ownerPurchaseDate">Kaufdatum / Finanzierungsbeginn</label><input id="ownerPurchaseDate" type="date"></div>
+  <div class="field"><label for="ownerDataDate">Datenstichtag</label><input id="ownerDataDate" type="date"></div>
+  <div class="field"><label for="ownerMarketValue">Heutiger Marktwert (optional)</label><input id="ownerMarketValue" inputmode="decimal" placeholder="Leer = Kaufpreis"></div>
+  <div class="field wide"><label for="ownerBalance">Tatsächliche Restschuld am Datenstichtag (optional)</label><input id="ownerBalance" inputmode="decimal" placeholder="Leer = rechnerisch"></div>
+  <div class="field"><label for="ownerCosts">Laufende Eigenheimkosten / Monat</label><input id="ownerCosts" inputmode="decimal" value="0"></div>
+  <div class="field"><label for="ownerReserve">Zusätzliches Instandhaltungsbudget / Monat</label><input id="ownerReserve" inputmode="decimal" value="0"></div>
+  <div class="field wide"><label for="ownerSavedList">Gespeicherte Eigenheime</label><select id="ownerSavedList"><option value="">– Eigenheim auswählen –</option></select></div>
+ </div>
+ <p class="portfolio-note">Die monatlichen Eigenheimkosten umfassen z. B. Grundsteuer, Versicherungen und laufende Betriebskosten. Das Instandhaltungsbudget nur zusätzlich angeben. Die Darlehensrate wird separat berechnet.</p>
+ <div class="invest-actions">
+  <button id="ownerSave" class="primary-action" type="button">Eigenheim speichern</button>
+  <button id="ownerLoad" type="button">Laden</button>
+  <button id="ownerDelete" type="button">Löschen</button>
+  <button id="ownerPdf" type="button">PDF herunterladen</button>
+ </div>
+ <details class="invest-backup"><summary>Eigenheime sichern &amp; wiederherstellen (.json)</summary>
+  <div class="invest-actions">
+   <button id="ownerBackup" type="button">Eigenheime als JSON sichern</button>
+   <button id="ownerRestore" type="button">JSON hochladen</button>
+   <input id="ownerBackupFile" type="file" accept=".json,application/json" style="display:none">
+  </div>
+  <p class="portfolio-note">Die Datei enthält alle gespeicherten Eigenheime und kann im anderen Browser wieder eingelesen werden. Für das vollständige Portfolio die Portfolio-Sicherung verwenden.</p>
+ </details>
+ <p id="ownerStatusMessage" class="invest-save-status" role="status" aria-live="polite"></p>
+</section>
 </aside><main class="resultstack">
 <section class="card primary"><h2>Deine Finanzierung</h2><div class="eyecap">Monatliche Annuität</div><div class="big" id="monthly">–</div><div class="smallunder">Konstante anfängliche Monatsrate (ohne Sondertilgung)</div>
 <div class="topstats"><div class="topstat"><span>Darlehensbetrag</span><strong id="loanTop">–</strong></div><div class="topstat"><span>Finanzierung / Kaufpreis</span><strong id="ltv">–</strong></div><div class="topstat"><span>Eigenkapital</span><strong id="equityTop">–</strong></div></div>
@@ -552,6 +584,7 @@ function setAppTab(tab){
   el(id).setAttribute('aria-pressed',String(key===tab));
  }
  el('investPanel').classList.toggle('gone',tab!=='invest');
+ el('ownerManager').classList.toggle('gone',tab!=='owner');
  el('mainLayout').classList.toggle('gone',tab==='portfolio');
  el('portfolioPanel').classList.toggle('gone',tab!=='portfolio');
  if(tab==='portfolio'){initializePortfolio();renderPortfolio();}
@@ -628,7 +661,8 @@ const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.d
 });
 
 const INVESTMENT_STORAGE_KEY='annuitaeten-rechner.immobilien.v1';
-const investmentFields=[...inputs,...investInputs,'extra','marketTenure','investAddress','investPropertyStatus','investPurchaseDate','investDataDate','investMarketValue','investBalance'];
+const ownerFields=['ownerAddress','ownerStatus','ownerPurchaseDate','ownerDataDate','ownerMarketValue','ownerBalance','ownerCosts','ownerReserve'];
+const investmentFields=[...inputs,...investInputs,...ownerFields,'extra','marketTenure','investAddress','investPropertyStatus','investPurchaseDate','investDataDate','investMarketValue','investBalance'];
 function localIsoDate(){
  const d=new Date(),pad=n=>String(n).padStart(2,'0');
  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
@@ -662,8 +696,8 @@ function renderSavedInvestments(selectedId=''){
  const records=readSavedInvestments().slice().sort((a,b)=>a.name.localeCompare(b.name,'de'));
  const previous=selectedId||list.value;
  list.replaceChildren(new Option('– Immobilie auswählen –',''));
- for(const item of records)list.add(new Option(item.name,item.id));
- list.value=records.some(x=>x.id===previous)?previous:'';
+ for(const item of records.filter(x=>x.propertyType!=='owner'))list.add(new Option(item.name,item.id));
+ list.value=records.some(x=>x.id===previous&&x.propertyType!=='owner')?previous:'';
  el('investLoad').disabled=!list.value;
  el('investDelete').disabled=!list.value;
 }
@@ -693,7 +727,7 @@ function saveInvestment(){
  if(!name){setInvestmentSaveStatus('Bitte zuerst einen Namen für die Wohnung eingeben.',true);return}
  if(!investmentInputsValid()){setInvestmentSaveStatus('Bitte Finanzierung, Kaltmiete, Kaufdatum und Datenstichtag prüfen. Für Bestandsimmobilien darf das Kaufdatum nicht nach dem Datenstichtag liegen.',true);return}
  const entries=readSavedInvestments();
- const matched=entries.find(x=>x.name.trim().toLocaleLowerCase('de')===name.toLocaleLowerCase('de'));
+ const matched=entries.find(x=>x.propertyType!=='owner'&&x.name.trim().toLocaleLowerCase('de')===name.toLocaleLowerCase('de'));
  if(matched&&!window.confirm('Die Immobilie "'+matched.name+'" bereits gespeichert. Aktuelle Werte überschreiben?'))return;
  const item=captureInvestment(name);
  if(matched){item.id=matched.id;entries.splice(entries.indexOf(matched),1,item)}
@@ -730,7 +764,7 @@ function loadInvestmentRecord(item){
  return true;
 }
 function loadInvestment(){
- const item=readSavedInvestments().find(x=>x.id===el('investSavedList').value);
+ const item=readSavedInvestments().find(x=>x.propertyType!=='owner'&&x.id===el('investSavedList').value);
  if(!item){setInvestmentSaveStatus('Bitte eine gespeicherte Immobilie auswählen.',true);return}
  if(loadInvestmentRecord(item)){setInvestmentSaveStatus('Immobilie geladen: '+item.name)}
 }
@@ -776,7 +810,7 @@ function importInvestmentBackup(file,source='invest'){
   const records=readSavedInvestments();
   const importedPortfolios=Array.isArray(json.portfolios)?json.portfolios:[];
   if(importedPortfolios.length>500||importedPortfolios.some(p=>!p||typeof p.name!=='string'||!Array.isArray(p.ids)))throw Error('Portfolioformat');
-  const conflicts=added.filter(i=>records.some(e=>e.name.trim().toLocaleLowerCase('de')===i.name.trim().toLocaleLowerCase('de')));
+  const conflicts=added.filter(i=>records.some(e=>(e.propertyType==='owner')===(i.propertyType==='owner')&&e.name.trim().toLocaleLowerCase('de')===i.name.trim().toLocaleLowerCase('de')));
   if(conflicts.length&&!window.confirm(conflicts.length+' gleichnamige Immobilie(n) überschreiben?'))return;
   const imported=[],idMap=new Map();
   for(const i of added){
@@ -785,9 +819,9 @@ function importInvestmentBackup(file,source='invest'){
    for(const field of investmentFields){
     if(['string','number'].includes(typeof i.values[field]))cleanValues[field]=String(i.values[field]).slice(0,100);
    }
-   const found=records.findIndex(e=>e.name.trim().toLocaleLowerCase('de')===name.toLocaleLowerCase('de'));
+   const found=records.findIndex(e=>(e.propertyType==='owner')===(i.propertyType==='owner')&&e.name.trim().toLocaleLowerCase('de')===name.toLocaleLowerCase('de'));
    const id=found>=0?records[found].id:'obj-'+Date.now()+'-'+Math.random().toString(36).slice(2,9);
-   const item={id,name,date:new Date().toISOString(),equityMode:i.equityMode==='pct'?'pct':'euro',values:cleanValues};
+   const item={id,name,date:new Date().toISOString(),propertyType:i.propertyType==='owner'?'owner':'invest',equityMode:i.equityMode==='pct'?'pct':'euro',values:cleanValues};
    if(found>=0)records.splice(found,1,item);else records.push(item);
    if(typeof i.id==='string')idMap.set(i.id,id);
    imported.push(item);
@@ -818,7 +852,7 @@ function importInvestmentBackup(file,source='invest'){
     }
     storePortfolios(all);
    }
-   renderSavedInvestments(imported.length?imported[0].id:'');
+   renderSavedInvestments(imported.length?imported[0].id:'');renderSavedOwners();
    if(portfolioInitialized){
     renderPortfolioChoices();renderPortfolioSaved();renderPortfolioRefinancings();renderPortfolio();
     if(source==='portfolio'&&portCount){
@@ -828,9 +862,9 @@ function importInvestmentBackup(file,source='invest'){
     }
    }
    const result=imported.length+' Immobilie(n) und '+portCount+' Portfolio(s) aus der JSON-Sicherung importiert.';
-   if(source==='portfolio')portfolioMessage(result);else setInvestmentSaveStatus(result);
+   if(source==='portfolio')portfolioMessage(result);else if(source==='owner')ownerMessage(result);else setInvestmentSaveStatus(result);
   }
- }).catch(()=>{const msg='Ungültige JSON-Sicherung. Bitte eine Sicherungsdatei aus diesem Rechner wählen.';if(source==='portfolio')portfolioMessage(msg,true);else setInvestmentSaveStatus(msg,true)});
+ }).catch(()=>{const msg='Ungültige JSON-Sicherung. Bitte eine Sicherungsdatei aus diesem Rechner wählen.';if(source==='portfolio')portfolioMessage(msg,true);else if(source==='owner')ownerMessage(msg,true);else setInvestmentSaveStatus(msg,true)});
 }
 /* Offline-fähiger PDF-Generator mit A4, Helvetica und Windows-1252-Zeichensatz. */
 function investmentPdfBytes(propertyName){
@@ -994,6 +1028,148 @@ el('investPropertyStatus').addEventListener('change',()=>{
 renderSavedInvestments();
 investInputs.forEach(id=>el(id).addEventListener('input',renderInvestment));
 
+
+/* Eigenheimverwaltung: gemeinsame Immobilienliste, eigene Objektart. */
+function ownerMessage(message,error=false){
+ const node=el('ownerStatusMessage');node.textContent=message;node.classList.toggle('error',error);
+}
+function renderSavedOwners(selected=''){
+ const list=el('ownerSavedList'),items=readSavedInvestments().filter(x=>x.propertyType==='owner')
+  .sort((a,b)=>a.name.localeCompare(b.name,'de'));
+ const previous=selected||list.value;
+ list.replaceChildren(new Option('– Eigenheim auswählen –',''));
+ for(const item of items)list.add(new Option(item.name,item.id));
+ list.value=items.some(x=>x.id===previous)?previous:'';
+ for(const id of ['ownerLoad','ownerDelete'])el(id).disabled=!list.value;
+}
+function ownerFinanceValid(){
+ const price=v('price'),tax=v('tax'),notary=v('notary'),broker=v('broker');
+ const cost=price*(1+(tax+notary+broker)/100);
+ const own=mode==='pct'?cost*v('equityPct')/100:v('equityEuro');
+ const start=validPortfolioDate(el('ownerPurchaseDate').value),stamp=validPortfolioDate(el('ownerDataDate').value);
+ return [price,tax,notary,broker,own,v('interest'),v('repay'),v('fixed'),v('extra'),
+   v('ownerCosts'),v('ownerReserve')].every(n=>Number.isFinite(n)&&n>=0)
+  &&price>0&&tax<=100&&notary<=100&&broker<=100&&own<=cost
+  &&v('interest')<=50&&v('repay')<=100&&Number.isInteger(v('fixed'))&&v('fixed')>=1&&v('fixed')<=50
+  &&start&&stamp&&(el('ownerStatus').value==='planned'||start.iso<=stamp.iso)
+  &&['ownerMarketValue','ownerBalance'].every(id=>!el(id).value.trim()||(Number.isFinite(v(id))&&v(id)>=0));
+}
+function ownerSave(){
+ const name=el('ownerName').value.trim();
+ if(!name){ownerMessage('Bitte einen Namen für das Eigenheim eingeben.',true);return}
+ if(!ownerFinanceValid()){ownerMessage('Bitte Finanzierung, Kaufdatum, Datenstichtag und laufende Kosten prüfen.',true);return}
+ const records=readSavedInvestments();
+ const old=records.find(x=>x.propertyType==='owner'&&x.name.toLocaleLowerCase('de')===name.toLocaleLowerCase('de'));
+ if(old&&!window.confirm('Eigenheim "'+old.name+'" überschreiben?'))return;
+ const values=Object.fromEntries([...inputs,...ownerFields,'extra'].map(id=>[id,el(id).value]));
+ const item={id:old?old.id:'obj-'+Date.now()+'-'+Math.random().toString(36).slice(2,9),
+  name,propertyType:'owner',date:new Date().toISOString(),equityMode:mode,values};
+ if(old)records.splice(records.indexOf(old),1,item);else records.push(item);
+ if(persistSavedInvestments(records)){
+  renderSavedOwners(item.id);
+  if(portfolioInitialized){renderPortfolioChoices();renderPortfolioRefinancings();renderPortfolio();}
+  ownerMessage((old?'Eigenheim aktualisiert: ':'Eigenheim gespeichert: ')+name);
+ }
+}
+function ownerLoadRecord(item){
+ if(!item||item.propertyType!=='owner')return false;
+ for(const id of [...inputs,...ownerFields,'extra']){
+  if(Object.hasOwn(item.values,id))el(id).value=String(item.values[id]);
+ }
+ mode=item.equityMode==='pct'?'pct':'euro';
+ el('fieldEuro').classList.toggle('gone',mode!=='euro');
+ el('fieldPct').classList.toggle('gone',mode!=='pct');
+ el('modeEuro').classList.toggle('active',mode==='euro');
+ el('modePct').classList.toggle('active',mode==='pct');
+ el('ownerName').value=item.name;
+ update();setAppTab('owner');renderSavedOwners(item.id);return true;
+}
+function ownerLoad(){
+ const item=readSavedInvestments().find(x=>x.id===el('ownerSavedList').value&&x.propertyType==='owner');
+ if(!item){ownerMessage('Bitte ein Eigenheim auswählen.',true);return}
+ ownerLoadRecord(item);ownerMessage('Eigenheim geladen: '+item.name);
+}
+function ownerDelete(){
+ const id=el('ownerSavedList').value,item=readSavedInvestments().find(x=>x.id===id&&x.propertyType==='owner');
+ if(!item)return;
+ if(!window.confirm('Eigenheim "'+item.name+'" löschen?'))return;
+ if(persistSavedInvestments(readSavedInvestments().filter(x=>x.id!==id))){
+  portfolioSelection.delete(id);renderSavedOwners();
+  if(portfolioInitialized){renderPortfolioChoices();renderPortfolioRefinancings();renderPortfolio();}
+  ownerMessage('Eigenheim gelöscht: '+item.name);
+ }
+}
+function ownerExport(){
+ const properties=readSavedInvestments().filter(x=>x.propertyType==='owner');
+ if(!properties.length){ownerMessage('Bitte zuerst mindestens ein Eigenheim speichern.',true);return}
+ const ids=new Set(properties.map(x=>x.id));
+ const portfolios=getPortfolios().filter(p=>p.ids.some(id=>ids.has(id)));
+ const content={format:'annuitaeten-immobilien-v1',exportedAt:new Date().toISOString(),properties,portfolios:[]};
+ downloadInvestmentBlob(new Blob([JSON.stringify(content,null,2)],{type:'application/json;charset=utf-8'}),
+  'eigenheime-sicherung.json');
+ ownerMessage(properties.length+' Eigenheim(e) als JSON gesichert. Portfolios können separat im Portfolio-Reiter exportiert werden.');
+}
+function ownerPdfBytes(){
+ const acquisition=v('price')*(1+(v('tax')+v('notary')+v('broker'))/100);
+ const own=mode==='pct'?acquisition*v('equityPct')/100:v('equityEuro');
+ const monthly=Math.max(0,acquisition-own)*(v('interest')+v('repay'))/1200;
+ const lineStrings=[
+  'EIGENHEIM - FINANZIERUNGSBERICHT',
+  'Objekt: '+(el('ownerName').value.trim()||'Eigenheim'),
+  'Adresse: '+el('ownerAddress').value.trim(),
+  'Status: '+(el('ownerStatus').value==='planned'?'Geplanter Kauf':'Bestand'),
+  'Kaufdatum: '+el('ownerPurchaseDate').value,
+  'Datenstichtag: '+el('ownerDataDate').value,
+  'Kaufpreis: '+money(v('price')),
+  'Grunderwerbsteuer: '+percent(v('tax')),
+  'Notar / Grundbuch: '+percent(v('notary')),
+  'Makler: '+percent(v('broker')),
+  'Eigenkapital: '+money(mode==='pct'?v('price')*(1+(v('tax')+v('notary')+v('broker'))/100)*v('equityPct')/100:v('equityEuro')),
+  'Sollzins: '+percent(v('interest')),
+  'Anfangstilgung: '+percent(v('repay')),
+  'Zinsbindung: '+v('fixed')+' Jahre',
+  'Monatliche Darlehensrate: '+el('monthly').textContent.trim(),
+  'Heutiger Marktwert: '+(el('ownerMarketValue').value.trim()||'Kaufpreis als Annahme'),
+  'Restschuld am Datenstichtag: '+(el('ownerBalance').value.trim()||'Rechnerische Restschuld'),
+  'Laufende Kosten monatlich: '+money(v('ownerCosts')),
+  'Zusaetzliches Instandhaltungsbudget: '+money(v('ownerReserve')),
+  'Monatliche Belastung inklusive laufender Kosten: '+money(monthly+v('ownerCosts')+v('ownerReserve')),
+  'Hinweis: Keine Mieteinnahmen und keine Vermietungssteuer angesetzt.'
+ ];
+ const cp={'€':128,'–':150,'ä':228,'ö':246,'ü':252,'Ä':196,'Ö':214,'Ü':220,'ß':223};
+ const esc=str=>'('+[...String(str)].map(ch=>{const n=ch.charCodeAt(0),code=cp[ch]||n;return code>=32&&code<=255?String.fromCharCode(code):'?';}).join('')
+  .replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)')+')';
+ const lines=lineStrings.map((str,i)=>'BT /F1 '+(i===0?'15':'10')+' Tf 1 0 0 1 42 '+(790-i*32)+' Tm '+esc(str.slice(0,90))+' Tj ET').join('\n');
+ const objects=[null,
+  '<< /Type /Catalog /Pages 2 0 R >>',
+  '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+  '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+  '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+  '<< /Length '+lines.length+' >>\nstream\n'+lines+'\nendstream'];
+ let out='%PDF-1.4\n',offsets=[0];
+ for(let i=1;i<objects.length;i++){offsets.push(out.length);out+=i+' 0 obj\n'+objects[i]+'\nendobj\n'}
+ const start=out.length;out+='xref\n0 '+objects.length+'\n0000000000 65535 f \n';
+ for(let i=1;i<objects.length;i++)out+=String(offsets[i]).padStart(10,'0')+' 00000 n \n';
+ out+='trailer\n<< /Size '+objects.length+' /Root 1 0 R >>\nstartxref\n'+start+'\n%%EOF';
+ return Uint8Array.from(out,ch=>ch.charCodeAt(0)&255);
+}
+function ownerPdf(){
+ if(!ownerFinanceValid()){ownerMessage('Bitte zuerst vollständige Eigenheimdaten und eine gültige Finanzierung eingeben.',true);return}
+ downloadInvestmentBlob(new Blob([ownerPdfBytes()],{type:'application/pdf'}),
+  'Eigenheim-'+investSafeName(el('ownerName').value||'Finanzierung')+'.pdf');
+ ownerMessage('Eigenheim-PDF erstellt.');
+}
+for(const [id,handler] of [['ownerSave',ownerSave],['ownerLoad',ownerLoad],['ownerDelete',ownerDelete],
+ ['ownerPdf',ownerPdf],['ownerBackup',ownerExport]])el(id).addEventListener('click',handler);
+el('ownerRestore').addEventListener('click',()=>el('ownerBackupFile').click());
+el('ownerBackupFile').addEventListener('change',event=>{
+ importInvestmentBackup(event.target.files&&event.target.files[0],'owner');event.target.value='';
+});
+el('ownerSavedList').addEventListener('change',()=>renderSavedOwners());
+el('ownerPurchaseDate').value=localIsoDate();
+el('ownerDataDate').value=localIsoDate();
+renderSavedOwners();
+
 /* Portfolio: Datenstruktur & Zeitmodell. Lokale Speicherung, keine Netzwerkübermittlung. */
 const PORTFOLIO_STORAGE_KEY='annuitaeten-rechner.portfolios.v1';
 let portfolioSelection=new Set(),portfolioRefis={},portfolioInitialized=false,portfolioProjection=[],portfolioCurrent=null;
@@ -1015,6 +1191,29 @@ function portfolioNumeric(obj,id,fallback=NaN){
  return raw==null||raw===''?fallback:number(raw);
 }
 function portfolioProperty(item){
+ if(item.propertyType==='owner'){
+  const g=id=>portfolioNumeric(item,id),sv=id=>String((item.values||{})[id]||'');
+  const price=g('price'),tax=g('tax'),notary=g('notary'),broker=g('broker');
+  const fullCost=price*(1+(tax+notary+broker)/100);
+  const own=item.equityMode==='pct'?fullCost*g('equityPct')/100:g('equityEuro');
+  const purchase=validPortfolioDate(sv('ownerPurchaseDate')),asOf=validPortfolioDate(sv('ownerDataDate')||(item.date||'').slice(0,10));
+  const status=sv('ownerStatus')==='planned'?'planned':'existing';
+  const market=g('ownerMarketValue',NaN),balance=g('ownerBalance',NaN);
+  const financeOk=[price,tax,notary,broker,own,g('interest'),g('repay'),g('fixed'),g('ownerCosts'),g('ownerReserve')].every(n=>Number.isFinite(n)&&n>=0)
+   &&price>0&&tax<=100&&notary<=100&&broker<=100&&own<=fullCost
+   &&g('interest')<=50&&g('repay')<=100&&g('fixed')>=1&&g('fixed')<=50&&Number.isInteger(g('fixed'))
+   &&(!Number.isFinite(market)||market>=0)&&(!Number.isFinite(balance)||balance>=0);
+  const issues=[];
+  if(!purchase)issues.push('Kaufdatum fehlt oder ist ungültig');
+  if(!asOf)issues.push('Datenstichtag fehlt oder ist ungültig');
+  if(purchase&&asOf&&status==='existing'&&purchase.iso>asOf.iso)issues.push('Kaufdatum liegt nach dem Datenstichtag');
+  if(!financeOk)issues.push('Finanzierungs- oder Eigenheimkosten prüfen');
+  return {id:item.id,name:item.name,address:sv('ownerAddress'),propertyType:'owner',status,purchase,asOf,issues,
+   price,fullCost,own:Math.max(0,Math.min(fullCost,own)),loan:Math.max(0,fullCost-own),
+   rate:g('interest'),repay:g('repay'),fixed:g('fixed'),rent:0,
+   costs:g('ownerCosts'),reserve:g('ownerReserve'),deduct:0,vacancy:0,taxRate:0,building:0,afa:0,
+   market:Number.isFinite(market)?market:price,balance:Number.isFinite(balance)?balance:null,valid:issues.length===0};
+ }
  const g=id=>portfolioNumeric(item,id);
  const s=id=>String((item.values||{})[id]||'');
  const price=g('price'),tax=g('tax'),notary=g('notary'),broker=g('broker');
@@ -1094,6 +1293,7 @@ function initializePortfolio(){
 function editPortfolioProperty(item){
  const full=readSavedInvestments().find(x=>x.id===item.id);
  if(!full)return;
+ if(full.propertyType==='owner'){ownerLoadRecord(full);ownerMessage('Eigenheimdaten ergänzen und speichern.');return;}
  if(!loadInvestmentRecord(full)){
   portfolioMessage('Die Immobilie konnte nicht geöffnet werden.',true);
   return;
@@ -1121,7 +1321,7 @@ function renderPortfolioChoices(){
   const outer=document.createElement('span'),title=document.createElement('strong'),sub=document.createElement('small');
   title.textContent=item.name;
   sub.textContent=property.valid
-   ? (property.status==='planned'?'Geplant · ':'Bestand · ')+property.purchase.iso+(property.address?' · '+property.address:'')
+   ? (item.propertyType==='owner'?'Eigenheim · ':'Kapitalanlage · ')+(property.status==='planned'?'Geplant · ':'Bestand · ')+property.purchase.iso+(property.address?' · '+property.address:'')
    : 'Noch nicht auswertbar: '+property.issues.join('; ');
   if(!property.valid){sub.className='portfolio-choice-warning';incomplete++}
   outer.append(title,sub);label.append(inp,outer);container.append(label);
@@ -1319,7 +1519,7 @@ function displayPortfolio(){
  };
  for(const r of o.rows){
   appendRow(tbody,[r.p.name,r.active?(r.p.status==='planned'?'Neukauf':'Bestand'):'Noch nicht erworben',
-   r.active?t(r.rent):'–',r.active?t(r.complete?r.cash:null):'–',
+   r.active?(r.p.propertyType==='owner'?'Eigennutzung · 0 €':t(r.rent)):'–',r.active?t(r.complete?r.cash:null):'–',
    r.active?t(r.debt):'–',r.active?t(r.value):'–']);
  }
  const yearsBody=el('portfolioYearRows');yearsBody.replaceChildren();
@@ -1438,7 +1638,7 @@ function portfolioPdfBytes(){
   space(84);
   txt(43,y,p.name.slice(0,65),11,true);y-=20;
   paragraph((p.address?p.address+' | ':'')+(p.status==='planned'?'Geplanter Kauf':'Bestand')+
-   ' | Kaufdatum: '+p.purchase.iso+' | Datenstichtag: '+p.asOf.iso);
+   ' | '+(p.propertyType==='owner'?'Eigennutzung':'Vermietung')+' | Kaufdatum: '+p.purchase.iso+' | Datenstichtag: '+p.asOf.iso);
   row('Kaufpreis / Erwerbskosten',money(p.price)+' / '+money(p.fullCost));
   row('Wert / Restschuld im Bewertungsjahr',r.active?
    moneyOr(r.value)+' / '+moneyOr(r.debt):'Noch nicht gekauft');
