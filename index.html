@@ -293,8 +293,17 @@
       <button id="portfolioDelete" type="button">Löschen</button>
       <button id="portfolioPdf" type="button">PDF herunterladen</button>
     </div>
+    <details class="invest-backup">
+      <summary>Portfolio sichern &amp; wiederherstellen (.json)</summary>
+      <div class="invest-actions">
+        <button id="portfolioBackup" type="button">Alle Portfolios als JSON sichern</button>
+        <button id="portfolioRestore" type="button">Portfolio-JSON hochladen</button>
+        <input id="portfolioBackupFile" type="file" accept=".json,application/json" style="display:none">
+      </div>
+      <p class="portfolio-note">Die Sicherung enthält alle gespeicherten Portfolios einschließlich ihrer ausgewählten Immobilien, Szenarien und Anschlussfinanzierungen. Sie lässt sich auch auf einem anderen Gerät wiederherstellen. Vorhandene gleichnamige Immobilien werden nur nach Rückfrage überschrieben.</p>
+    </details>
     <p id="portfolioSaveStatus" class="invest-save-status" role="status" aria-live="polite"></p>
-    <p class="portfolio-note">Lokale Browserspeicherung wie im Kapitalanlage-Reiter. Die JSON-Sicherung der Immobilien umfasst künftig auch alle gespeicherten Portfolios.</p>
+    <p class="portfolio-note">Die Speicherung erfolgt lokal in diesem Browser. Für einen Gerätewechsel die JSON-Sicherung herunterladen und im neuen Browser hochladen.</p>
    </section>
   </div>
   <div class="portfolio-stack">
@@ -756,7 +765,7 @@ function exportInvestmentBackup(){
  downloadInvestmentBlob(blob,'immobilien-sicherung.json');
  setInvestmentSaveStatus(entries.length+' Immobilie(n) und '+getPortfolios().length+' Portfolio(s) als JSON-Sicherung exportiert.');
 }
-function importInvestmentBackup(file){
+function importInvestmentBackup(file,source='invest'){
  if(!file)return;
  file.text().then(text=>{
   const json=JSON.parse(text);
@@ -810,10 +819,18 @@ function importInvestmentBackup(file){
     storePortfolios(all);
    }
    renderSavedInvestments(imported.length?imported[0].id:'');
-   if(portfolioInitialized){renderPortfolioChoices();renderPortfolioSaved();renderPortfolioRefinancings();renderPortfolio();}
-   setInvestmentSaveStatus(imported.length+' Immobilie(n) und '+portCount+' Portfolio(s) aus der Sicherung importiert.');
+   if(portfolioInitialized){
+    renderPortfolioChoices();renderPortfolioSaved();renderPortfolioRefinancings();renderPortfolio();
+    if(source==='portfolio'&&portCount){
+     const first=importedPortfolios.find(p=>p&&typeof p.name==='string');
+     const restored=getPortfolios().find(p=>first&&p.name.toLocaleLowerCase('de')===first.name.trim().toLocaleLowerCase('de'));
+     if(restored){renderPortfolioSaved(restored.id);portfolioLoad();}
+    }
+   }
+   const result=imported.length+' Immobilie(n) und '+portCount+' Portfolio(s) aus der JSON-Sicherung importiert.';
+   if(source==='portfolio')portfolioMessage(result);else setInvestmentSaveStatus(result);
   }
- }).catch(()=>setInvestmentSaveStatus('Ungültige JSON-Sicherung. Bitte die exportierte Sicherungsdatei wählen.',true));
+ }).catch(()=>{const msg='Ungültige JSON-Sicherung. Bitte eine Sicherungsdatei aus diesem Rechner wählen.';if(source==='portfolio')portfolioMessage(msg,true);else setInvestmentSaveStatus(msg,true)});
 }
 /* Offline-fähiger PDF-Generator mit A4, Helvetica und Windows-1252-Zeichensatz. */
 function investmentPdfBytes(propertyName){
@@ -1527,6 +1544,16 @@ function portfolioLoad(){
  renderPortfolioChoices();renderPortfolioRefinancings();renderPortfolio();
  portfolioMessage('Portfolio geladen: '+item.name);
 }
+function portfolioExportBackup(){
+ const portfolios=getPortfolios();
+ if(!portfolios.length){portfolioMessage('Noch kein gespeichertes Portfolio vorhanden. Bitte zuerst „Portfolio speichern“ wählen.',true);return}
+ const ids=new Set(portfolios.flatMap(p=>p.ids));
+ const properties=readSavedInvestments().filter(p=>ids.has(p.id));
+ const content={format:'annuitaeten-immobilien-v1',exportedAt:new Date().toISOString(),properties,portfolios};
+ downloadInvestmentBlob(new Blob([JSON.stringify(content,null,2)],{type:'application/json;charset=utf-8'}),
+  'immobilienportfolios-sicherung.json');
+ portfolioMessage(portfolios.length+' Portfolio(s) mit '+properties.length+' zugehörigen Immobilien als JSON exportiert.');
+}
 function portfolioDelete(){
  const id=el('portfolioSaved').value,item=getPortfolios().find(x=>x.id===id);
  if(!item){portfolioMessage('Bitte ein Portfolio auswählen.',true);return}
@@ -1547,6 +1574,13 @@ el('portfolioLoad').addEventListener('click',portfolioLoad);
 el('portfolioDelete').addEventListener('click',portfolioDelete);
 el('portfolioSaved').addEventListener('change',()=>renderPortfolioSaved());
 el('portfolioPdf').addEventListener('click',portfolioDownloadPdf);
+el('portfolioBackup').addEventListener('click',portfolioExportBackup);
+el('portfolioRestore').addEventListener('click',()=>el('portfolioBackupFile').click());
+el('portfolioBackupFile').addEventListener('change',event=>{
+ const file=event.target.files&&event.target.files[0];
+ importInvestmentBackup(file,'portfolio');
+ event.target.value='';
+});
 window.addEventListener('resize',()=>{draw();if(!el('portfolioPanel').classList.contains('gone'))drawPortfolioCharts()});update();
 })();
 </script></body></html>
